@@ -9,7 +9,7 @@ const postSchema = new mongoose.Schema({
         required: true
     },
 
-    artical: {
+    article: {
         type: String,
         required: true
     },
@@ -31,7 +31,6 @@ const postSchema = new mongoose.Schema({
 
     dateandtime: {
         type: Date,
-        required: true
     },
 
     formatedDate: {
