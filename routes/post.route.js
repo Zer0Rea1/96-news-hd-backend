@@ -5,6 +5,6 @@ import {newPost} from '../controllers/post.controller.js'
 const router = express.Router();
 
 
-router.get('/newpost', newPost)
+router.post('/newpost', newPost)
 
 export default router

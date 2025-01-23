@@ -1,11 +1,10 @@
 import mongoose from "mongoose";
+import date from '../utils/dateFormater.js';
 
-import date from '../utils/dateFormater.js'
-
-const formateDate = date()
+const formateDate = date();
 const postSchema = new mongoose.Schema({
 
-    title:{
+    title: {
         type: String,
         required: true
     },
@@ -20,22 +19,24 @@ const postSchema = new mongoose.Schema({
         required: true
     },
 
-    category:{
-        type:String,
-        required:true
+    category: {
+        type: String,
+        required: true
     },
 
-  author: {
-    type: String,
-    required: true,
-  },
+    author: {
+        type: String,
+        required: true,
+    },
 
-    dateandtime: {Date},
+    dateandtime: {
+        type: Date,
+        required: true
+    },
 
     formatedDate: {
         type: String
     }
-
 
 });
 const Post = mongoose.model("Post", postSchema);

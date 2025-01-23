@@ -1,19 +1,22 @@
-import express from 'express'
-import connectMongoDB from './db/connectMongoDB.js'
+import express from 'express';
+import connectMongoDB from './db/connectMongoDB.js';
 import dotenv from "dotenv";
-import postRoute from './routes/post.route.js'
-const app = express()
-const port = process.env.PORT
+import postRoute from './routes/post.route.js';
+
+const app = express();
+const port = process.env.PORT;
 dotenv.config();
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
+// Middleware to parse JSON request bodies
+app.use(express.json());
 
-app.use('/api/newpost', postRoute)
+app.get('/', (req, res) => {
+  res.send('Hello World!');
+});
+
+app.use('/api', postRoute);
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-    
-  // connectMongoDB();
-})
+  console.log(`api app listening on port ${port}`);
+  connectMongoDB();
+});
