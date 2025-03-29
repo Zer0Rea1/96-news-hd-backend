@@ -2,13 +2,13 @@ import express from 'express';
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
 import bcrypt from 'bcryptjs';
-
 import dotenv from "dotenv";
+
 const router = express.Router();
 dotenv.config();  
+
 // Helper function for error responses
 const errorResponse = (res, status, message) => {
-  console.log(message);
   return res.status(status).json({ success: false, message });
 };
 
@@ -34,15 +34,13 @@ router.post('/signup', async (req, res) => {
       return errorResponse(res, 400, 'Email or username already exists');
     }
 
-    // Hash the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
     const newUser = new User({ 
       username, 
       email, 
-      password: hashedPassword 
+      password: hashedPassword
     });
 
     await newUser.save();
@@ -66,39 +64,34 @@ router.post('/signup', async (req, res) => {
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
-  // Validate input
   if (!email || !password) {
     return errorResponse(res, 400, 'Email and password are required');
   }
 
   try {
-    // Find user (case insensitive email)
     const user = await User.findOne({ 
-      email: { $regex: new RegExp(email, 'i') } 
+      email: { $regex: new RegExp('^' + email + '$', 'i') } 
     });
 
     if (!user) {
       return errorResponse(res, 400, 'Invalid credentials');
     }
 
-    // Compare passwords
     const isPasswordValid = await bcrypt.compare(password, user.password);
     
     if (!isPasswordValid) {
       return errorResponse(res, 400, 'Invalid credentials');
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       { id: user._id, email: user.email },
-      process.env.TOKEN_SECRET,
+      process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
 
-    // Set secure cookie
     res.cookie("newsToken", token, {
       httpOnly: true,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 30 * 24 * 60 * 60 * 1000,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? 'None' : 'Lax',
       path: "/"
@@ -125,16 +118,20 @@ router.get('/check-cookie', async (req, res) => {
     const token = req.cookies.newsToken;
     
     if (!token) {
-      return res.status(200).json({ isAuthenticated: false });
+      return res.status(200).json({ 
+        isAuthenticated: false,
+        message: "No token found" 
+      });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Check if user still exists
     const user = await User.findById(decoded.id);
     if (!user) {
-      return res.status(200).json({ isAuthenticated: false });
+      return res.status(200).json({ 
+        isAuthenticated: false,
+        message: "User not found" 
+      });
     }
 
     return res.status(200).json({ 
@@ -147,10 +144,10 @@ router.get('/check-cookie', async (req, res) => {
     });
 
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(200).json({ isAuthenticated: false });
-    }
-    return errorResponse(res, 500, `Internal server errorjyryuf86d ${error}`);
+    return res.status(200).json({ 
+      isAuthenticated: false,
+      message: "Invalid token" 
+    });
   }
 });
 

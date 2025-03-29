@@ -3,6 +3,7 @@ import connectMongoDB from './db/connectMongoDB.js';
 import dotenv from "dotenv";
 import postRoute from './routes/post.route.js';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import authRoute from './routes/auth.route.js'
 const app = express();
 const port = process.env.PORT;
@@ -10,11 +11,14 @@ dotenv.config();
 
 // Middleware to parse JSON request bodies
 app.use(express.json());
+app.use(cookieParser());
 
 // Enable CORS for all origins
 app.use(cors({
   origin: 'http://localhost:5173', // Allow requests from your frontend
   credentials: true, // Allow cookies (if needed)
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.get('/', (req, res) => {
   res.send('Hello World!');
