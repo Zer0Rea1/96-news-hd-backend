@@ -15,7 +15,23 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  refreshToken: { type: String },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
+  paid: {
+    type: Boolean,
+    default: false,
+  },
+  avatar:{
+    type: String,
+    default: "https://cdn.vectorstock.com/i/500p/08/19/gray-photo-placeholder-icon-design-ui-vector-35850819.jpg"
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const User = mongoose.model('User', userSchema);
