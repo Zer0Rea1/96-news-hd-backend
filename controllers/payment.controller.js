@@ -24,3 +24,25 @@ export const payment = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 }
+
+export const getPaymentVerificationData = async (req,res)=>{
+    try {
+        
+        
+        const payments = await Payement.find();
+        
+        if (!payments) {
+          return res.status(404).json({
+            success: false,
+            message: 'Payments verification requests is empty'
+          });
+        }
+        
+        return res.status(200).json(payments);
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: 'Internal server error ${error}'
+        });
+      }
+}
