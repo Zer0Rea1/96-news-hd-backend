@@ -24,17 +24,14 @@ const postSchema = new mongoose.Schema({
         required: true
     },
 
-    author: {
-        type: String,
-        required: true,
+    authorid: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
     },
 
     dateandtime: {
         type: Date,
-    },
-
-    formatedDate: {
-        type: String
     }
 
 });

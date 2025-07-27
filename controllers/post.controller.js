@@ -12,9 +12,9 @@ export const newPost = async (req, res) => {
             article,
             thumbnailImage,
             category,
-            author,
-            dateandtime: new Date(),
-            formatedDate: formatedate // or use your date formatting function
+            authorid,
+            dateandtime: new Date()
+            // formatedDate: formatedate // or use your date formatting function
         });
 
         await newPost.save();

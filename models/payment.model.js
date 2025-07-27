@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 
-const payementSchema = new mongoose.Schema({
+const paymentSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -30,9 +30,12 @@ const payementSchema = new mongoose.Schema({
     userPaymentNo: {
         type: String,
         required: true
+    },
+    verifiedAt:{
+        type:Date
     }
 })
 
-const Payement = mongoose.model("Payement", payementSchema);
+const Payment = mongoose.model("Payment", paymentSchema);
 
-export default Payement;
+export default Payment;

@@ -21,8 +21,9 @@ const userSchema = new mongoose.Schema({
     default: 'user',
   },
   paid: {
-    type: Boolean,
-    default: false,
+    type: String,
+    enum: ["paid", "pending", "unpaid"],
+    default: "unpaid",
   },
   avatar:{
     type: String,
