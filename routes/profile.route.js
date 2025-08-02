@@ -1,6 +1,6 @@
 import express from 'express';
 import { getProfile, updateProfile } from '../controllers/profile.controller.js';
-import { verifyToken,isPaid } from '../middleware/auth.middleware.js';
+import { verifyToken,isPaid, checkMembership } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
@@ -8,9 +8,9 @@ const router = express.Router();
 // router.use(verifyToken);
 
 // Get user profile
-router.get('/',verifyToken, getProfile);
+router.get('/',verifyToken,isPaid, getProfile, checkMembership);
 
 // Update user profile
-router.put('/update',verifyToken, isPaid, updateProfile);
+router.put('/update',verifyToken, isPaid, updateProfile,checkMembership);
 
 export default router; 

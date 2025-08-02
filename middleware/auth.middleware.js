@@ -91,3 +91,46 @@ export const isPaid = async (req, res, next) => {
     });
   }
 }; 
+
+
+// auth.middleware.js
+export const checkMembership = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
+    console.log(user)
+    // Check if membership is expired
+    if (user.paid == 'paid' && user.expiresAt < new Date()) {
+      console.log("membership is expired",user)
+      // Automatically deactivate expired membership
+      user.paid = 'unpaid';
+      await user.save();
+      
+      return res.status(403).json({ 
+        success: false,
+        message: "Your membership has expired. Please renew." 
+      });
+    }
+
+    if (!user.paid == 'unpaid' || !user.paid == 'pending')  {
+      return res.status(403).json({ 
+        success: false,
+        message: "Membership required for this action" 
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Membership check error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
+  }
+};

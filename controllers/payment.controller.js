@@ -135,23 +135,21 @@ export const verifyPayment = async (req, res) => {
         });
       }
 
-      // 2. Update the user's paid status
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // Add 30 days
+
       const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: { paid: "paid" } },
+        updatedPayment.userId,
+        { 
+          $set: { 
+            paid: 'paid',
+            expiresAt: expiresAt,
+            lastPayment: paymentId
+          } 
+        },
         { new: true, session }
       );
 
-      if (!updatedUser) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(404).json({ 
-          success: false,
-          message: "User not found" 
-        });
-      }
-
-      // Commit the transaction if both operations succeeded
       await session.commitTransaction();
       session.endSession();
 

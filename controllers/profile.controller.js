@@ -24,6 +24,8 @@ export const getProfile = async (req, res) => {
         createdAt: user.createdAt, // MongoDB _id contains creation timestamp
         avatar: user.avatar,
         paid: user.paid,
+        expiresAt: user.expiresAt,
+        lastPayment: user.lastPayment
       }
     });
   } catch (error) {

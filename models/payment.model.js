@@ -33,6 +33,10 @@ const paymentSchema = new mongoose.Schema({
     },
     verifiedAt:{
         type:Date
+    },
+    verifiedBy:{
+        type: mongoose.SchemaTypes.ObjectId,
+        
     }
 })
 

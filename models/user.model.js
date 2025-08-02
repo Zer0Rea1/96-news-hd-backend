@@ -33,6 +33,15 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  expiresAt: {
+      type: Date,
+      default: null
+  },
+    lastPayment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Payment',
+      default: null
+  }
 });
 
 const User = mongoose.model('User', userSchema);

@@ -18,7 +18,7 @@ app.use(cookieParser());
 
 // Enable CORS for all origins
 app.use(cors({
-  origin: ['http://localhost:5173',"http://192.168.8.106:5173","https://web.postman.co"], // Allow requests from your frontend
+  origin: ['http://localhost:5173',"https://96-news-hd-backend.vercel.app"], // Allow requests from your frontend
   credentials: true, // Allow cookies (if needed)
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
