@@ -8,9 +8,9 @@ const router = express.Router();
 // router.use(verifyToken);
 
 // Get user profile
-router.get('/',verifyToken,isPaid, getProfile, checkMembership);
+router.get('/',verifyToken,isPaid, getProfile);
 
 // Update user profile
-router.put('/update',verifyToken, isPaid, updateProfile,checkMembership);
+router.put('/update',verifyToken, isPaid,checkMembership, updateProfile);
 
 export default router; 

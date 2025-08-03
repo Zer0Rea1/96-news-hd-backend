@@ -6,6 +6,7 @@ dotenv.config();
 
 export const verifyToken = (req, res, next) => {
   try {
+    // console.log("verify token middleware")
     const token = req.cookies.newsToken;
     
     if (!token) {
@@ -28,6 +29,7 @@ export const verifyToken = (req, res, next) => {
 
 export const isAdmin = async (req, res, next) => {
   try {
+    // console.log("isadmin middleware")
     // Get user ID from req.user (set by verifyToken middleware)
     const userId = req.user.id;
     
@@ -63,7 +65,7 @@ export const isPaid = async (req, res, next) => {
   try {
     // Get user ID from req.user (set by verifyToken middleware)
     const userId = req.user.id;
-    
+    // console.log("ispaid middleware")
     // Find user in database to check paid status
     const user = await User.findById(userId);
     
@@ -96,6 +98,7 @@ export const isPaid = async (req, res, next) => {
 // auth.middleware.js
 export const checkMembership = async (req, res, next) => {
   try {
+    // console.log("membership middleware");
     const user = await User.findById(req.user.id);
     
     if (!user) {
@@ -104,10 +107,12 @@ export const checkMembership = async (req, res, next) => {
         message: "User not found" 
       });
     }
-    console.log(user)
+
+    // console.log("User membership status:", user.paid, "Expires at:", user.expiresAt);
+
     // Check if membership is expired
-    if (user.paid == 'paid' && user.expiresAt < new Date()) {
-      console.log("membership is expired",user)
+    if (user.paid === 'paid' && user.expiresAt && user.expiresAt < new Date()) {
+      // console.log("membership is expired", user);
       // Automatically deactivate expired membership
       user.paid = 'unpaid';
       await user.save();
@@ -118,7 +123,8 @@ export const checkMembership = async (req, res, next) => {
       });
     }
 
-    if (!user.paid == 'unpaid' || !user.paid == 'pending')  {
+    // Check if user has active membership
+    if (user.paid !== 'paid') {
       return res.status(403).json({ 
         success: false,
         message: "Membership required for this action" 

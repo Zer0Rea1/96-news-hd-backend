@@ -4,7 +4,7 @@ export const getProfile = async (req, res) => {
   try {
     // Extract user ID from the JWT token (added by middleware)
     const userId = req.user.id;
-    
+   
     const user = await User.findById(userId);
     
     if (!user) {
@@ -104,3 +104,6 @@ export const updateProfile = async (req, res) => {
     });
   }
 }; 
+
+
+
