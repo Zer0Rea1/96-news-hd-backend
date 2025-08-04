@@ -13,12 +13,13 @@ export const newPost = async (req, res) => {
         const uploadResponse = await cloudinary.uploader.upload(thumbnailImage, {
               folder: 'blog-images'
         });
-
+        
 
         const newPost = new Post({
             title,
             article,
             thumbnailImage: uploadResponse.secure_url,
+            cloudinaryPublicId: uploadResponse.public_id,
             category,
             authorid,
             dateandtime: new Date()
@@ -35,7 +36,7 @@ export const newPost = async (req, res) => {
 
 export const getPost = async (req,res)=>{
     try{
-        const post = await Post.find();
+        const post = await Post.find().sort({ dateandtime: -1 });
         res.status(200).json(post)
     } catch {
         res.status(500).json({message:"Error getting post"})
@@ -45,7 +46,7 @@ export const getPostByUser = async (req,res)=>{
     try{
         const userId = req.user.id;
     
-        const post = await Post.find({authorid: userId})
+        const post = await Post.find({authorid: userId}).sort({ dateandtime: -1 })
         res.status(200).json(post)
     } catch {
         res.status(500).json({message:"Error getting post"})
@@ -64,3 +65,83 @@ export const getPostbyid = async (req,res)=>{
         res.status(500).json({message:"Error getting post"})
     }
 }
+
+
+export const deletePost = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Find the post first
+        const post = await Post.findById(id);
+        if (!post) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+      
+        // Delete image from Cloudinary
+        await cloudinary.uploader.destroy(post.cloudinaryPublicId);
+
+        // Delete post from database
+        await Post.findByIdAndDelete(id);
+
+        res.status(200).json({ message: 'Post and associated image deleted successfully' });
+    } catch (error) {
+        console.error('Delete error:', error);
+        res.status(500).json({ 
+            message: 'Error deleting post', 
+            error: error.message 
+        });
+    }
+};
+
+export const editPost = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, article, thumbnailImage, category } = req.body;
+
+        // Find the existing post
+        const post = await Post.findById(id);
+        if (!post) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        let updateData = {
+            title,
+            article,
+            category
+           
+        };
+
+        // Only process image if a new one was provided
+        if (thumbnailImage && thumbnailImage !== post.thumbnailImage) {
+            // Delete old image from Cloudinary
+           
+            await cloudinary.uploader.destroy(post.cloudinaryPublicId);
+
+            // Upload new image
+            const uploadResponse = await cloudinary.uploader.upload(thumbnailImage, {
+                folder: 'blog-images'
+            });
+
+            updateData.thumbnailImage = uploadResponse.secure_url;
+            updateData.cloudinaryPublicId = uploadResponse.public_id;
+        }
+
+        // Update the post
+        const updatedPost = await Post.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true } // Return the updated document
+        );
+
+        res.status(200).json({ 
+            message: 'Post updated successfully', 
+            post: updatedPost 
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            message: 'Error updating post', 
+            error: error.message 
+        });
+    }
+};

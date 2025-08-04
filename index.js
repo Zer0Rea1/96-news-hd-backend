@@ -13,7 +13,7 @@ const port = process.env.PORT;
 dotenv.config();
 
 // Middleware to parse JSON request bodies
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(cookieParser());
 
 // Enable CORS for all origins
