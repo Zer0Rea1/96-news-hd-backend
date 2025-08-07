@@ -34,14 +34,24 @@ export const newPost = async (req, res) => {
 };
 
 
-export const getPost = async (req,res)=>{
-    try{
-        const post = await Post.find().sort({ dateandtime: -1 });
-        res.status(200).json(post)
-    } catch {
-        res.status(500).json({message:"Error getting post"})
-    }
-}
+// /api/getpost
+export const getPost = async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = parseInt(req.query.skip) || 0;
+
+  try {
+    const posts = await Post.find()
+      .sort({ dateandtime: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalCount = await Post.countDocuments(); // to check if more posts exist
+    res.status(200).json({ posts, totalCount });
+  } catch {
+    res.status(500).json({ message: "Error getting posts" });
+  }
+};
+
 export const getPostByUser = async (req,res)=>{
     try{
         const userId = req.user.id;
@@ -98,7 +108,7 @@ export const editPost = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, article, thumbnailImage, category } = req.body;
-
+        // console.log(title, article, thumbnailImage, category, id)
         // Find the existing post
         const post = await Post.findById(id);
         if (!post) {

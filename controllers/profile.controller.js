@@ -107,3 +107,11 @@ export const updateProfile = async (req, res) => {
 
 
 
+export const getAllProfiles = async(req,res)=>{
+  try {
+    const users = await User.find();
+    res.status(200).json({message: "all user fetched successfully", users})
+  } catch {
+    res.status(404).json({message: "smth happened in fetching users"})
+  }
+}

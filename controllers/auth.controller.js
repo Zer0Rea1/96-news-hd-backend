@@ -12,15 +12,13 @@ const errorResponse = (res, status, message) => {
 
 // Register a new user
 export const signup = async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, firstName, lastName, phoneNumber, dateOfBirth, city } = req.body;
 
-  // Validate input
-  if (!username || !email || !password) {
+  if (!username || !email || !password || !firstName || !lastName || !phoneNumber || !dateOfBirth || !city) {
     return errorResponse(res, 400, 'All fields are required');
   }
 
   try {
-    // Check if user already exists (case insensitive)
     const existingUser = await User.findOne({ 
       $or: [
         { email: { $regex: new RegExp(email, 'i') } },
@@ -34,17 +32,22 @@ export const signup = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const date = new Date()
-    const newUser = new User({ 
-      username, 
-      email, 
+
+    const newUser = new User({
+      username,
+      email,
       password: hashedPassword,
-      createdAt: date
+      firstName,
+      lastName,
+      phoneNumber,
+      dateOfBirth,
+      city,
+      createdAt: new Date()
     });
 
     await newUser.save();
 
-    return res.status(201).json({ 
+    return res.status(201).json({
       success: true,
       message: "User created successfully",
       user: {
@@ -55,9 +58,11 @@ export const signup = async (req, res) => {
     });
 
   } catch (error) {
+    console.error('Signup Error:', error);
     return errorResponse(res, 500, 'Internal server error');
   }
 };
+
 
 // Login user
 export const login = async (req, res) => {
