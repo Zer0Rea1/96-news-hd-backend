@@ -1,5 +1,5 @@
         [build]
-        publish = "dist" # Or your static assets folder if you have a frontend
+   
         functions = "netlify/functions"
 
         [functions]
