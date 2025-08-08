@@ -70,7 +70,7 @@ app.use('/api/auth', authRoute);
 app.use('/api/profile', profileRoute);
 app.use('/api/payment', paymentVerificationRoute);
 
-app.listen(port,"0.0.0.0", () => {
+app.listen(port, () => {
   console.log(`api app listening on port ${port}`);
   connectMongoDB();
 });
