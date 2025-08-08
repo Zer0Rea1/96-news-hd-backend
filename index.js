@@ -12,17 +12,23 @@ import Post from './models/post.model.js';
 const app = express();
 const port = process.env.PORT;
 dotenv.config();
-app.use(cors({
-  origin: "https://96-news-hd-frontend.vercel.app",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
 
-app.options('*', cors({
-  origin: "https://96-news-hd-frontend.vercel.app",
-  credentials: true
-}));
+
+// Remove the existing CORS configuration and replace with:
+
+const corsOptions = {
+  origin: [
+    'https://96-news-hd-frontend.vercel.app',
+    'http://localhost:3000' // For local development
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
+// Remove the app.options('*', cors()) line as it's now included in the main CORS config
 
 // Middleware to parse JSON request bodies
 app.use(express.json({ limit: "5mb" }));
