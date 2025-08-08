@@ -12,18 +12,24 @@ import Post from './models/post.model.js';
 const app = express();
 const port = process.env.PORT;
 dotenv.config();
+app.use(cors({
+  origin: "https://96-news-hd-frontend.vercel.app",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.options('*', cors({
+  origin: "https://96-news-hd-frontend.vercel.app",
+  credentials: true
+}));
 
 // Middleware to parse JSON request bodies
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
 
 // Enable CORS for all origins
-app.use(cors({
-  origin: ['http://localhost:5173',"https://96-news-hd-frontend.vercel.app"], // Allow requests from your frontend
-  credentials: true, // Allow cookies (if needed)
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+
 
 
 cloudinary.config({
@@ -62,3 +68,5 @@ app.listen(port,"0.0.0.0", () => {
   console.log(`api app listening on port ${port}`);
   connectMongoDB();
 });
+
+export default app;
