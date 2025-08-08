@@ -8,6 +8,7 @@ import authRoute from './routes/auth.route.js'
 import profileRoute from './routes/profile.route.js';
 import paymentVerificationRoute from './routes/payment.route.js';
 import { v2 as cloudinary } from "cloudinary";
+import Post from './models/post.model.js';
 const app = express();
 const port = process.env.PORT;
 dotenv.config();
@@ -18,7 +19,7 @@ app.use(cookieParser());
 
 // Enable CORS for all origins
 app.use(cors({
-  origin: ['http://localhost:5173',"https://96-news-hd.vercel.app"], // Allow requests from your frontend
+  origin: ['http://localhost:5173',"https://96-news-hd-frontend.vercel.app"], // Allow requests from your frontend
   credentials: true, // Allow cookies (if needed)
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -34,6 +35,23 @@ cloudinary.config({
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
+
+app.get('/api/search', async (req, res) => {
+  const { query } = req.query;
+  if (!query) return res.status(400).json({ success: false, message: "Missing search query" });
+
+  try {
+    const results = await Post.find({
+      title: { $regex: query, $options: 'i' },
+    });
+
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 
 app.use('/api', postRoute);
 app.use('/api/auth', authRoute);
