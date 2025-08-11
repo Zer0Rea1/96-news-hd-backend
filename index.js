@@ -19,7 +19,7 @@ dotenv.config();
 const corsOptions = {
   origin: [
     'https://96-news-hd-frontend.vercel.app',
-    'http://localhost:3000' // For local development
+    'http://localhost:5173' // For local development
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

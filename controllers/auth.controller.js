@@ -159,8 +159,8 @@ export const checkAuth = async (req, res) => {
 export const logout = (req, res) => {
   res.clearCookie('newsToken', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
+    secure: true, // Keep for production
+    sameSite: 'none', // Required for cross-site cookies to be sent/cleared
   });
   res.status(200).json({ success: true });
-}; 
+};
