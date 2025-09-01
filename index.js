@@ -65,6 +65,38 @@ app.get('/api/search', async (req, res) => {
 });
 
 
+app.get('/post/:slug', async (req, res) => {
+  const { slug } = req.params;
+
+  // Fetch post details from DB or API
+  const post = await Post.findById(slug) // your logic here
+  console.log(post)
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta property="og:title" content="${post.title}" />
+      <meta property="og:description" content="${post.article || 'Read more on our blog'}" />
+      <meta property="og:image" content="${post.thumbnailImage}" />
+      <meta property="og:url" content="https://96-news-hd-frontend.vercel.app/news/${slug}" />
+      <meta property="og:type" content="article" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <title>${post.title}</title>
+    </head>
+    <body>
+      Redirecting...
+      <script>
+        window.location.href = "https://96-news-hd-frontend.vercel.app/news/${slug}";
+      </script>
+    </body>
+    </html>
+  `;
+
+  res.send(html);
+});
+
 app.use('/api', postRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/profile', profileRoute);
