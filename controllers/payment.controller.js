@@ -10,9 +10,9 @@ export const submitPayment = async (req, res) => {
 
     // Validate input
     if (!amount || !paymentMethod || !proofImage || !phoneNumber) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "All fields are required" 
+        message: "All fields are required"
       });
     }
 
@@ -34,23 +34,23 @@ export const submitPayment = async (req, res) => {
 
     await newPayment.save();
 
-     async function updateUserPaidStatus(){
-      try{
+    async function updateUserPaidStatus() {
+      try {
         const updateUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        paid: "pending"
-      },
-      { new: true }
-    )
+          userId,
+          {
+            paid: "pending"
+          },
+          { new: true }
+        )
       }
-      catch{
+      catch {
         console.log("user was not updated successfully")
       }
-     } 
-    updateUserPaidStatus()
+    }
+    await updateUserPaidStatus()
 
-    res.status(201).json({ 
+    res.status(201).json({
       success: true,
       message: "Payment submitted for verification",
       payment: newPayment
@@ -58,10 +58,10 @@ export const submitPayment = async (req, res) => {
 
   } catch (error) {
     console.error("Payment submission error:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message 
+      error: error.message
     });
   }
 }
@@ -96,12 +96,12 @@ export const getPaymentVerificationData = async (req, res) => {
 // Admin verifies a payment
 export const verifyPayment = async (req, res) => {
   try {
-    const { paymentId,userId } = req.body;
-    
+    const { paymentId, userId } = req.body;
+
     if (!paymentId && !userId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Payment ID and user id is required" 
+        message: "Payment ID and user id is required"
       });
     }
 
@@ -112,16 +112,16 @@ export const verifyPayment = async (req, res) => {
     try {
       // 1. Update the payment status
       const updatedPayment = await Payment.findOneAndUpdate(
-        { 
-          _id: paymentId, 
-          paymentStatus: 'pending' 
+        {
+          _id: paymentId,
+          paymentStatus: 'pending'
         },
-        { 
-          $set: { 
-            paymentStatus: 'verified', 
+        {
+          $set: {
+            paymentStatus: 'verified',
             verifiedAt: new Date(),
             verifiedBy: req.user.id
-          } 
+          }
         },
         { new: true, session }
       );
@@ -129,9 +129,9 @@ export const verifyPayment = async (req, res) => {
       if (!updatedPayment) {
         await session.abortTransaction();
         session.endSession();
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          message: "No pending payment found with this ID" 
+          message: "No pending payment found with this ID"
         });
       }
 
@@ -140,12 +140,12 @@ export const verifyPayment = async (req, res) => {
 
       const updatedUser = await User.findByIdAndUpdate(
         updatedPayment.userId,
-        { 
-          $set: { 
+        {
+          $set: {
             paid: 'paid',
             expiresAt: expiresAt,
             lastPayment: paymentId
-          } 
+          }
         },
         { new: true, session }
       );
@@ -153,7 +153,7 @@ export const verifyPayment = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
 
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: true,
         message: "Payment verified and user status updated",
         payment: updatedPayment,
@@ -165,13 +165,13 @@ export const verifyPayment = async (req, res) => {
       session.endSession();
       throw error;
     }
-    
+
   } catch (error) {
     console.error("Payment verification error:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message 
+      error: error.message
     });
   }
 }

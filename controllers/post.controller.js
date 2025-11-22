@@ -87,6 +87,11 @@ export const deletePost = async (req, res) => {
             return res.status(404).json({ message: 'Post not found' });
         }
 
+        // Check if the user is the author of the post
+        if (post.authorid !== req.user.id) {
+            return res.status(403).json({ message: 'You are not authorized to delete this post' });
+        }
+
       
         // Delete image from Cloudinary
         await cloudinary.uploader.destroy(post.cloudinaryPublicId);
@@ -113,6 +118,11 @@ export const editPost = async (req, res) => {
         const post = await Post.findById(id);
         if (!post) {
             return res.status(404).json({ message: 'Post not found' });
+        }
+
+        // Check if the user is the author of the post
+        if (post.authorid !== req.user.id) {
+            return res.status(403).json({ message: 'You are not authorized to edit this post' });
         }
 
         let updateData = {

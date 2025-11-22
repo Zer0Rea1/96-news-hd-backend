@@ -25,13 +25,15 @@ const postSchema = new mongoose.Schema({
 
     category: {
         type: String,
-        required: true
+        required: true,
+        index: true
     },
 
     authorid: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true
+        required: true,
+        index: true
     },
 
     dateandtime: {

@@ -15,23 +15,23 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  firstName:{
+  firstName: {
     type: String,
     required: true,
   },
-  lastName:{
+  lastName: {
     type: String,
     required: true,
   },
-  phoneNumber:{
-    type: Number,
+  phoneNumber: {
+    type: String,
     required: true,
   },
-  dateOfBirth:{
+  dateOfBirth: {
     type: Date,
     required: true,
   },
-  city:{
+  city: {
     type: String,
     required: true,
   },
@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema({
     enum: ["paid", "pending", "unpaid"],
     default: "unpaid",
   },
-  avatar:{
+  avatar: {
     type: String,
     default: "https://cdn.vectorstock.com/i/500p/08/19/gray-photo-placeholder-icon-design-ui-vector-35850819.jpg"
   },
@@ -54,13 +54,13 @@ const userSchema = new mongoose.Schema({
     default: Date.now,
   },
   expiresAt: {
-      type: Date,
-      default: null
+    type: Date,
+    default: null
   },
-    lastPayment: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Payment',
-      default: null
+  lastPayment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    default: null
   }
 });
 

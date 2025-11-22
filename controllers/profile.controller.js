@@ -4,16 +4,16 @@ export const getProfile = async (req, res) => {
   try {
     // Extract user ID from the JWT token (added by middleware)
     const userId = req.user.id;
-   
+
     const user = await User.findById(userId);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     return res.status(200).json({
       success: true,
       profile: {
@@ -41,52 +41,52 @@ export const updateProfile = async (req, res) => {
     // Extract user ID from the JWT token (added by middleware)
     const userId = req.user.id;
     const { username, email } = req.body;
-    
+
     // Find user
     const user = await User.findById(userId);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     // Check if username or email is already taken
     if (username && username !== user.username) {
-      const existingUsername = await User.findOne({ 
+      const existingUsername = await User.findOne({
         username: { $regex: new RegExp('^' + username + '$', 'i') },
         _id: { $ne: userId }
       });
-      
+
       if (existingUsername) {
         return res.status(400).json({
           success: false,
           message: 'Username already taken'
         });
       }
-      
+
       user.username = username;
     }
-    
+
     if (email && email !== user.email) {
-      const existingEmail = await User.findOne({ 
+      const existingEmail = await User.findOne({
         email: { $regex: new RegExp('^' + email + '$', 'i') },
         _id: { $ne: userId }
       });
-      
+
       if (existingEmail) {
         return res.status(400).json({
           success: false,
           message: 'Email already taken'
         });
       }
-      
+
       user.email = email;
     }
-    
+
     await user.save();
-    
+
     return res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
@@ -103,15 +103,26 @@ export const updateProfile = async (req, res) => {
       message: 'Internal server error'
     });
   }
-}; 
+};
 
 
 
-export const getAllProfiles = async(req,res)=>{
+export const getAllProfiles = async (req, res) => {
   try {
-    const users = await User.find();
-    res.status(200).json({message: "all user fetched successfully", users})
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = parseInt(req.query.skip) || 0;
+
+    const users = await User.find().skip(skip).limit(limit);
+    const totalCount = await User.countDocuments();
+
+    res.status(200).json({
+      message: "all user fetched successfully",
+      users,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: Math.floor(skip / limit) + 1
+    })
   } catch {
-    res.status(404).json({message: "smth happened in fetching users"})
+    res.status(500).json({ message: "Error fetching users" })
   }
 }

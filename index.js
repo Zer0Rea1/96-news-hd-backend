@@ -9,9 +9,22 @@ import profileRoute from './routes/profile.route.js';
 import paymentVerificationRoute from './routes/payment.route.js';
 import { v2 as cloudinary } from "cloudinary";
 import Post from './models/post.model.js';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
 const app = express();
 const port = process.env.PORT;
 dotenv.config();
+
+// Security headers
+app.use(helmet());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
 
 
 // Remove the existing CORS configuration and replace with:

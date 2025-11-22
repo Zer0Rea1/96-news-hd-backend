@@ -19,7 +19,7 @@ export const signup = async (req, res) => {
   }
 
   try {
-    const existingUser = await User.findOne({ 
+    const existingUser = await User.findOne({
       $or: [
         { email: { $regex: new RegExp(email, 'i') } },
         { username: { $regex: new RegExp(username, 'i') } }
@@ -58,7 +58,7 @@ export const signup = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Signup Error:', error);
+    // console.error('Signup Error:', error);
     return errorResponse(res, 500, 'Internal server error');
   }
 };
@@ -73,8 +73,8 @@ export const login = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp('^' + email + '$', 'i') } 
+    const user = await User.findOne({
+      email: { $regex: new RegExp('^' + email + '$', 'i') }
     });
 
     if (!user) {
@@ -82,7 +82,7 @@ export const login = async (req, res) => {
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    
+
     if (!isPasswordValid) {
       return errorResponse(res, 400, 'Invalid credentials');
     }
@@ -120,25 +120,25 @@ export const login = async (req, res) => {
 export const checkAuth = async (req, res) => {
   try {
     const token = req.cookies.newsToken;
-    
+
     if (!token) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         isAuthenticated: false,
-        message: "No token found" 
+        message: "No token found"
       });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     const user = await User.findById(decoded.id);
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         isAuthenticated: false,
-        message: "User not found" 
+        message: "User not found"
       });
     }
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       isAuthenticated: true,
       user: {
         id: user._id,
@@ -148,9 +148,9 @@ export const checkAuth = async (req, res) => {
     });
 
   } catch (error) {
-    return res.status(200).json({ 
+    return res.status(200).json({
       isAuthenticated: false,
-      message: "Invalid token" 
+      message: "Invalid token"
     });
   }
 };
