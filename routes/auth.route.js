@@ -6,7 +6,7 @@ const router = express.Router();
 // Auth routes
 router.post('/signup', signup);
 router.post('/login', login);
-router.get('/check-cookie',verifyToken, checkMembership,checkAuth);
+router.get('/check-cookie', verifyToken, checkMembership, checkAuth);
 router.post('/logout', verifyToken, logout);
 
 export default router;

@@ -31,7 +31,7 @@ app.use(limiter);
 
 const corsOptions = {
   origin: [
-   'https://96newshd.vercel.app',
+    'https://96newshd.vercel.app',
     'http://localhost:5173' // For local development
   ],
   credentials: true,

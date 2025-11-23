@@ -1,4 +1,5 @@
 import Post from '../models/post.model.js';
+import mongoose from 'mongoose';
 import formatedDate from '../utils/dateFormater.js'
 import { v2 as cloudinary } from 'cloudinary';
 import User from '../models/user.model.js';
@@ -80,15 +81,16 @@ export const getPostbyid = async (req,res)=>{
 export const deletePost = async (req, res) => {
     try {
         const { id } = req.params;
-
         // Find the post first
         const post = await Post.findById(id);
+
         if (!post) {
             return res.status(404).json({ message: 'Post not found' });
         }
-
+   
+     
         // Check if the user is the author of the post
-        if (post.authorid !== req.user.id) {
+        if (String(post.authorid) !== String(req.user.id)) {
             return res.status(403).json({ message: 'You are not authorized to delete this post' });
         }
 
@@ -121,7 +123,8 @@ export const editPost = async (req, res) => {
         }
 
         // Check if the user is the author of the post
-        if (post.authorid !== req.user.id) {
+        if (String(post.authorid) !== String(req.user.id)) {
+         
             return res.status(403).json({ message: 'You are not authorized to edit this post' });
         }
 
