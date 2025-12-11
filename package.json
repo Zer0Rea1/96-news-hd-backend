@@ -11,18 +11,18 @@
   "type": "module",
   "description": "",
   "dependencies": {
-    "bcryptjs": "^3.0.2",
-    "cloudinary": "^2.6.1",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
-    "jsonwebtoken": "^9.0.2",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.554.0",
-    "mongoose": "^8.12.1",
-    "nodemon": "^3.1.9",
+    "mongoose": "^8.20.2",
+    "nodemon": "^3.1.11",
     "serverless-http": "^3.2.0"
   }
 }
