@@ -114,7 +114,7 @@ app.get('/post/:id', async (req, res) => {
   const title       = escapeHtml(post.title);
   const description = escapeHtml(toExcerpt(post.article));
   const image       = escapeHtml(post.thumbnailImage || '');
-  const url         = `https://api.96newshd.com/news/${id}`;
+  const url         = `https://96newshd.com/news/${id}`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
