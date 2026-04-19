@@ -11,7 +11,7 @@ import { v2 as cloudinary } from "cloudinary";
 import Post from './models/post.model.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-
+import mongoose from 'mongoose';
 const app = express();
 const port = process.env.PORT;
 dotenv.config();
@@ -79,42 +79,71 @@ app.get('/api/search', async (req, res) => {
 });
 
 
-app.get('/post/:slug', async (req, res) => {
-  const { slug } = req.params;
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
-  // Fetch post using slug
-  const post = await Post.findOne({ _id: slug });
+function toExcerpt(str = '', max = 160) {
+  const plain = str.replace(/<[^>]*>/g, ''); // strip any HTML tags
+  return plain.length > max ? plain.slice(0, max).trimEnd() + '…' : plain;
+}
 
-  if (!post) {
-    return res.status(404).send("Post not found");
+app.get('/post/:id', async (req, res) => {
+  const { id } = req.params;
+
+  // Reject non-ObjectId values before hitting the DB
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).send('Post not found');
   }
 
-  const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  let post;
+  try {
+    post = await Post.findById(id);
+  } catch (err) {
+    return res.status(500).send('Server error');
+  }
 
-      <meta property="og:title" content="${post.title}" />
-      <meta property="og:description" content="${post.article || 'Read more on our blog'}" />
-      <meta property="og:image" content="${post.thumbnailImage}" />
-      <meta property="og:url" content="https://96newshd.vercel.app/news/${slug}" />
-      <meta property="og:type" content="article" />
+  if (!post) {
+    return res.status(404).send('Post not found');
+  }
 
-      <meta name="twitter:card" content="summary_large_image" />
-      <title>${post.title}</title>
-    </head>
-    <body>
-      Redirecting...
-      <script>
-        window.location.href = "https://96newshd.vercel.app/news/${slug}";
-      </script>
-    </body>
-    </html>
-  `;
-  res.setHeader("Content-Security-Policy", "script-src 'self' 'unsafe-inline';");
+  const title       = escapeHtml(post.title);
+  const description = escapeHtml(toExcerpt(post.article));
+  const image       = escapeHtml(post.thumbnailImage || '');
+  const url         = `https://api.96newshd.com/news/${id}`;
 
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${image}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:type" content="article" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${image}" />
+  <title>${title}</title>
+</head>
+<body>
+  <p>Redirecting…</p>
+  <script>
+    window.location.replace(${JSON.stringify(url)});
+  </script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=${url}" />
+  </noscript>
+</body>
+</html>`;
+
+  res.setHeader('Content-Security-Policy', "script-src 'self' 'unsafe-inline';");
   res.send(html);
 });
 
