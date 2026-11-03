@@ -1,0 +1,36 @@
+begin;
+do $$
+declare a uuid; b uuid; p jsonb; q jsonb; input jsonb; owner uuid='11111111-1111-4111-8111-111111111111';
+begin
+ assert not has_table_privilege('anon','public.news_posts','SELECT');
+ assert not has_function_privilege('authenticated','public.get_news(integer,integer,text,text,boolean)','EXECUTE');
+ assert (select relrowsecurity from pg_class where oid='public.news_posts'::regclass);
+ select id into a from public.news_tags where slug='pakistan';
+ select id into b from public.news_tags where slug='sports';
+ input=jsonb_build_object('slug','اردو-خبر-test','title','اردو خبر','article','<p>خبر</p>','thumbnailImage','https://res.cloudinary.com/news/image/upload/v1/96news/posts/a.webp','author_name','96 نیوز','status','published','tags',jsonb_build_array(a,b));
+ p=public.mutate_news_post('create','test-post',owner,input,null);
+ assert p->>'slug'='اردو-خبر-test';
+ assert (public.get_news(10,0,'pakistan',null,false)->>'totalCount')::integer=1;
+ assert (public.get_news(10,0,'sports',null,false)->>'totalCount')::integer=1;
+ assert public.get_news_post('اردو-خبر-test',false)->>'id'='test-post';
+ assert not(public.get_news_post('test-post',false) ? 'version');
+ p=public.mutate_news_post('update','test-post',owner,input||'{"title":"نیا عنوان","slug":"do-not-change"}'::jsonb,1);
+ assert p->>'slug'='اردو-خبر-test'; assert p->>'version'='2';
+ begin perform public.mutate_news_post('update','test-post',owner,input,1); raise exception 'Expected stale write'; exception when serialization_failure then null; end;
+ begin perform public.mutate_news_post('create','forbidden','22222222-2222-4222-8222-222222222222',input,null); raise exception 'Expected owner denial'; exception when insufficient_privilege then null; end;
+ begin perform public.mutate_news_post('create','invalid-label',owner,input||jsonb_build_object('tags',jsonb_build_array(a,a)),null); raise exception 'Expected duplicate label denial'; exception when invalid_parameter_value then null; end;
+ assert not exists(select 1 from public.news_posts where id='invalid-label');
+ begin delete from public.news_tags where id=a; raise exception 'Expected label protection'; exception when foreign_key_violation or restrict_violation then null; end;
+ p=public.mutate_news_post('create','draft',owner,input||'{"slug":"draft","status":"draft"}'::jsonb,null);
+ assert public.get_news_post('draft',false) is null;
+ assert public.get_news_post('draft',true)->>'status'='draft';
+ p=public.mutate_news_post('create','price',owner,input||'{"slug":"price","title":"قیمت 10% اور کم","status":"published"}'::jsonb,null);
+ assert (public.get_news(10,0,null,'%',false)->>'totalCount')::integer=1;
+ assert (select count(*) from public.news_activity where post_id='test-post')=2;
+ assert not exists(select 1 from pg_proc where proname in ('get_news','get_news_post','mutate_news_post') and prosecdef);
+ perform public.mutate_news_post('delete','test-post',owner,'{}',2);
+ assert public.get_news_post('test-post',true) is null;
+ assert (select count(*) from public.news_activity where post_id='test-post')=3;
+end;
+$$;
+rollback;

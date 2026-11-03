@@ -1,0 +1,13 @@
+        [build]
+   
+        functions = "netlify/functions"
+
+        [functions]
+        external_node_modules = ["express"] # Ensure Express is bundled
+        node_bundler = "esbuild" # Recommended bundler for performance
+
+        [[redirects]]
+        force = true
+        status = 200
+        from = "/*"
+        to = "/.netlify/functions/index" # Redirect all requests to your serverless function

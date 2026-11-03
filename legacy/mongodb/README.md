@@ -1,0 +1,1 @@
+Archived MongoDB account, signup, membership and payment implementation. Not imported or deployed by the unified API. Passwords, legacy accounts and payment records will not be imported into the active Postgres model; keep the protected MongoDB export for recovery.
