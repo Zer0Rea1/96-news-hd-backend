@@ -1,10 +1,11 @@
 import { Client } from "pg";
+import { readFileSync } from "node:fs";
 export function databaseClient() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   const url = new URL(process.env.DATABASE_URL);
   const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
   url.searchParams.delete("sslmode");
-  return new Client({ connectionString: url.href, connectionTimeoutMillis: 10000, statement_timeout: 30000, ssl: local ? false : { rejectUnauthorized: true } });
+  return new Client({ connectionString: url.href, connectionTimeoutMillis: 10000, statement_timeout: 30000, ssl: local ? false : { rejectUnauthorized: true, ca: readFileSync(new URL("../db/certs/supabase-root-2021.crt", import.meta.url), "utf8") } });
 }
 export function safeFailure(error: unknown) {
   const value = error as { name?: string; code?: string; message?: string } | null;

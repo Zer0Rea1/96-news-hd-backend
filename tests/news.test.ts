@@ -100,6 +100,18 @@ describe('unified news API', () => {
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private database details');
   });
+  test('delete accepts a JSON version when a proxy consumes If-Match', async () => {
+    expect((await request('/api/admin/news/posts/article-1','owner',{version:1},'DELETE')).status).toBe(204);
+    expect(calls.find(call => call.name === 'mutate_news_post')?.args.p_expected_version).toBe(1);
+    failure={code:'40001'};
+    expect((await request('/api/admin/news/posts/article-1','owner',{version:1},'DELETE')).status).toBe(409);
+  });
+  test('delete still rejects absent, malformed, or nonpositive versions', async () => {
+    expect((await request('/api/admin/news/posts/article-1','owner',undefined,'DELETE')).status).toBe(400);
+    for (const version of [0,-1,'1',null]) expect((await request('/api/admin/news/posts/article-1','owner',{version},'DELETE')).status).toBe(400);
+    expect(calls.find(call => call.name === 'mutate_news_post')).toBeUndefined();
+    expect((await request('/api/admin/news/posts/article-1','owner',undefined,'DELETE',{'If-Match':'1'})).status).toBe(204);
+  });
   test('CORS permits the version header required for owner deletion', async () => {
     const response=await request('/api/admin/news/posts/article-1',undefined,undefined,'OPTIONS',{
       Origin:'https://admin.96newshd.com', 'Access-Control-Request-Method':'DELETE', 'Access-Control-Request-Headers':'authorization,if-match',

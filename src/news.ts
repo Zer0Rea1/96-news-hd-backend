@@ -104,7 +104,10 @@ export function mountNews(app: Express, services?: Services) {
   app.put("/api/admin/news/posts/:reference", async (req, res, next) => { try { await save("update", req, res); } catch (error) { next(error); } });
   app.delete("/api/admin/news/posts/:reference", async (req, res, next) => {
     try {
-      const version = z.coerce.number().int().positive().parse(req.get("If-Match")?.replaceAll('"', ""));
+      // Hosting proxies may consume conditional headers; the JSON version survives forwarding.
+      const version = req.body && Object.keys(req.body).length
+        ? z.object({ version: z.number().int().positive() }).strict().parse(req.body).version
+        : z.coerce.number().int().positive().parse(req.get("If-Match")?.replaceAll('"', ""));
       const post = await getPost(reference.parse(req.params.reference), true);
       if (!post) { res.status(404).json({ error: "Post not found." }); return; }
       const { error } = await db!.rpc("mutate_news_post", { p_action: "delete", p_id: post.id, p_actor_id: res.locals.actor.id, p_input: {}, p_expected_version: version });

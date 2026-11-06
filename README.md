@@ -19,6 +19,8 @@ The first schema command previews the SQL checksum. `--apply` creates empty news
 
 The API listens on port 3001. For the main website, put `VITE_API_URL=http://localhost:3001` in its ignored `.env.local`. The profile frontend proxies `/api` to port 3001 in development.
 
+The schema setup client verifies PostgreSQL TLS using the public Supabase Root 2021 CA in `db/certs/supabase-root-2021.crt`. Certificate and hostname verification remain enabled. The CA is public and must be included in source uploads; it is not a credential.
+
 ## Netlify
 
 `netlify.toml` runs `bun run build`: TypeScript validation followed by schema setup. Netlify installs packages using Bun. Database setup runs during the hosted build, not in request handlers. A setup failure stops the build and retains the previous published deploy. Deployment uses the existing `api.96newshd.com` site. GitHub publishing is independent.
