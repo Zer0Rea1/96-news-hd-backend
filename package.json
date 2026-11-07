@@ -13,7 +13,13 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "db:migrate": "bun scripts/schema.ts",
-    "build": "bun run typecheck && bun run db:migrate --apply"
+    "build": "bun run typecheck && bun run db:migrate --apply",
+    "test:db": "bun scripts/test-db.ts",
+    "dev:local": "bun --env-file=.env.local --watch src/index.ts",
+    "db:local": "bun --env-file=.env.local scripts/schema.ts --apply",
+    "local:start": "bunx --bun supabase start --exclude realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
+    "local:setup": "bun scripts/local-setup.ts",
+    "test:local": "bun --env-file=.env.local scripts/verify-membership.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",
@@ -36,6 +42,7 @@
     "@types/pg": "8.23.1",
     "@types/sanitize-html": "2.16.2",
     "pg": "8.23.1",
+    "supabase": "3.0.0",
     "typescript": "7.0.2"
   }
 }

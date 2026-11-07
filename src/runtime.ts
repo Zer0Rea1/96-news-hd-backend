@@ -3,12 +3,27 @@ import { v2 as cloudinary } from "cloudinary";
 import { z } from "zod";
 import { createApp, type Services } from "./app.js";
 import { createPhotoManager } from "./profiles/photos.js";
-const keys = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "OWNER_USER_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"];
+const localOnly = process.env.LOCAL_ONLY === "true";
+if (localOnly) {
+  if (process.env.NODE_ENV === "production") throw new Error("Local-only mode cannot run in production");
+  for (const key of ["SUPABASE_URL", "DATABASE_URL"]) {
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(process.env[key] || "https://invalid").hostname)) throw new Error(`${key} must point to localhost in local-only mode`);
+  }
+}
+const keys = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "OWNER_USER_ID", ...(localOnly ? [] : ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"])];
 const ready = keys.every(key => Boolean(process.env[key])) && z.uuid().safeParse(process.env.OWNER_USER_ID).success;
 if (!ready && (process.env.NODE_ENV === "production" || Boolean(process.env.NETLIFY))) throw new Error("Missing or invalid API configuration: " + keys.filter(key => !process.env[key]).join(", "));
 let services: Services | undefined;
 if (ready) {
   const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (localOnly) {
+    services = { db, ownerId: process.env.OWNER_USER_ID!, upload: async buffer => {
+      const path = `${crypto.randomUUID()}.webp`;
+      const { error } = await db.storage.from("local-reporter-portraits").upload(path, buffer, { contentType: "image/webp" });
+      if (error) throw error;
+      return db.storage.from("local-reporter-portraits").getPublicUrl(path).data.publicUrl;
+    } };
+  } else {
   cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET, secure: true });
   function uploadImage(buffer: Buffer, folder: string): Promise<{url: string; publicId: string}> {
     return new Promise((resolve, reject) => {
@@ -23,6 +38,7 @@ if (ready) {
   services = { db, ownerId: process.env.OWNER_USER_ID!, cloudName: process.env.CLOUDINARY_CLOUD_NAME!, upload: photos.upload, cleanupPhotos: photos.cleanup,
     // shortcut: news thumbnails are retained after replacement/deletion; add tracked cleanup when storage volume warrants it.
     uploadNews: async buffer => (await uploadImage(buffer, "96news/posts")).url };
+  }
 }
 export default createApp(services);
 

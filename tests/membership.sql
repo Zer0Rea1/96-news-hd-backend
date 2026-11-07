@@ -1,0 +1,61 @@
+begin;
+insert into auth.users(id,email_confirmed_at) values
+ ('22222222-2222-4222-8222-222222222222',now()),('33333333-3333-4333-8333-333333333333',now());
+insert into public.reporters(id,name,father_name,designation,city,cnic,contact,whatsapp,address,issue_date,expiry_date)
+values ('88888888-8888-4888-8888-888888888888','Existing Reporter','Father','Reporter','Lahore','35202-8888888-8','03001234567','03001234567','Private','2026-01-01','2027-01-01');
+do $$ begin assert (select not public from storage.buckets where id='membership-private'); end $$;
+insert into storage.objects(bucket_id) values ('membership-private'),('legacy-public');
+set local role authenticated;
+do $$ begin
+ assert not exists(select 1 from storage.objects where bucket_id='membership-private'), 'Existing broad policies must not expose receipts';
+ assert exists(select 1 from storage.objects where bucket_id='legacy-public'), 'Existing app storage policies must keep working';
+ begin insert into storage.objects(bucket_id) values('membership-private'); raise exception 'Client uploaded directly to private bucket'; exception when insufficient_privilege then null; end;
+end $$;
+set local role service_role;
+do $$
+declare role_id uuid; a jsonb; b jsonb; original jsonb; profile public.reporters; owner uuid='11111111-1111-4111-8111-111111111111'; uid uuid='22222222-2222-4222-8222-222222222222'; outsider uuid='33333333-3333-4333-8333-333333333333'; details jsonb='{"name":"New Member","phone":"03001234567","cnic":"35202-1234567-1","address":"Private address","role":"رپورٹر","designation_area":"Lahore"}';
+begin
+  select to_jsonb(r) into original from public.reporters r where id='88888888-8888-4888-8888-888888888888';
+  assert (select relrowsecurity from pg_class where oid='public.membership_applications'::regclass);
+  assert not has_table_privilege('anon','public.membership_applications','SELECT');
+  assert not has_table_privilege('authenticated','public.membership_applications','UPDATE');
+  assert not has_function_privilege('authenticated','public.review_membership_application(uuid,uuid,text,jsonb,text)','EXECUTE');
+  assert not exists(select 1 from pg_proc where proname in ('create_membership_application','submit_membership_payment','review_membership_application') and prosecdef);
+  assert not has_table_privilege('authenticated','public.membership_payment_settings','UPDATE');
+  begin perform public.save_membership_payment_settings(outsider,'{"enabled":false,"accounts":[],"instructions":"Wrong owner","version":1}'); raise exception 'Member changed payment accounts'; exception when insufficient_privilege then null; end;
+  b=public.save_membership_payment_settings(owner,'{"enabled":true,"accounts":[{"name":"Local test","number":"TEST ONLY","title":"Test receiver"}],"instructions":"No payment needed","version":1}');
+  assert b->>'version'='2' and (b->>'enabled')::boolean and not b ? 'singleton';
+  begin perform public.save_membership_payment_settings(owner,'{"enabled":false,"accounts":[],"instructions":"Stale write","version":1}'); raise exception 'Stale settings overwrote account'; exception when serialization_failure then null; end;
+  select id into role_id from public.membership_roles where name='رپورٹر';
+  assert (select count(*)=9 from public.membership_roles);
+  assert (select fee=20000 from public.membership_roles where name='انچارج نمائندگان پنجاب');
+  a=public.create_membership_application(uid,'member@example.test',details,role_id,1);
+  b=public.create_membership_application(uid,'member@example.test',details||'{"role":"fake"}',role_id,1);
+  assert a->>'id'=b->>'id' and b->>'fee'='4000', 'Retries must not replace the original application or fee';
+  begin perform public.create_membership_application(owner,'owner@example.test',details,role_id,1); raise exception 'Owner application accepted'; exception when insufficient_privilege then null; end;
+  begin perform public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":1,"father_name":"Father"}'); raise exception 'Unpaid approval accepted'; exception when serialization_failure then null; end;
+  a=public.submit_membership_payment(uid,1,a->>'id'||'/receipt.webp');
+  begin perform public.review_membership_application((a->>'id')::uuid,outsider,'other@example.test','{"decision":"approve","version":2,"father_name":"Father"}'); raise exception 'Outsider approved'; exception when insufficient_privilege then null; end;
+  a=public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"reject","version":2,"reason":"Wrong transaction"}');
+  assert a->>'status'='rejected' and a->>'reporter_id' is null;
+  a=public.submit_membership_payment(uid,3,a->>'id'||'/corrected.webp');
+  assert a->>'status'='pending' and a->>'rejection_reason'='';
+  a=public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":4,"father_name":"Verified Father"}');
+  select * into profile from public.reporters where id=(a->>'reporter_id')::uuid;
+  assert profile.expiry_date-profile.issue_date=30, 'Membership lasts 30 days';
+  assert profile.status='active' and not profile.show_sensitive;
+  assert profile.city='Lahore';
+  begin perform public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":4,"father_name":"Father"}'); raise exception 'Duplicate approval accepted'; exception when serialization_failure then null; end;
+  assert (select count(*) from public.reporters)=2, 'Approval must create exactly one new credential';
+  assert (select to_jsonb(r)=original from public.reporters r where id='88888888-8888-4888-8888-888888888888'), 'Existing profile and printed UUID must remain unchanged';
+  assert (select count(*) from public.membership_reviews)=2;
+  begin perform public.save_membership_role(outsider,role_id,'{"name":"Bad","level":"city","fee":1,"fixed_province":null,"active":true,"version":1}'); raise exception 'Member changed role'; exception when insufficient_privilege then null; end;
+  perform public.save_membership_role(owner,role_id,'{"name":"Updated Reporter","level":"district","fee":5000,"fixed_province":null,"active":true,"version":1}');
+  assert (select m.fee=4000 and m.details->>'role'='رپورٹر' from public.membership_applications m where m.user_id=uid), 'Catalog edits cannot rewrite submitted prices or roles';
+  begin perform public.create_membership_application(outsider,'other@example.test',details,role_id,1); raise exception 'Stale role accepted'; exception when serialization_failure then null; end;
+  b=public.create_membership_application(outsider,'other@example.test',details,role_id,2);
+  b=public.submit_membership_payment(outsider,1,b->>'id'||'/receipt.webp');
+  begin perform public.review_membership_application((b->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":2,"father_name":"Father"}'); raise exception 'Existing CNIC was overwritten'; exception when unique_violation then null; end;
+  assert (select status='pending' from public.membership_applications where user_id=outsider), 'Failed approval must leave review retryable';
+end $$;
+rollback;

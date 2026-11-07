@@ -4,6 +4,7 @@ export function databaseClient() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   const url = new URL(process.env.DATABASE_URL);
   const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
+  if (process.env.LOCAL_ONLY === "true" && !local) throw new Error("Local-only mode refuses a remote database");
   url.searchParams.delete("sslmode");
   return new Client({ connectionString: url.href, connectionTimeoutMillis: 10000, statement_timeout: 30000, ssl: local ? false : { rejectUnauthorized: true, ca: readFileSync(new URL("../db/certs/supabase-root-2021.crt", import.meta.url), "utf8") } });
 }

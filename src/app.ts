@@ -4,6 +4,7 @@ import express, {
 } from "express";
 import helmet from "helmet";
 import cors from "cors";
+import { mountMembership } from "./membership.js";
 import { mountNews } from "./news.js";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
@@ -25,7 +26,7 @@ const idSchema = z.uuid();
 export function createApp(services?: Services) {
   const app = express();
   app.disable("x-powered-by");
-  const origins = (process.env.CORS_ORIGINS || "https://96newshd.com,https://www.96newshd.com,https://admin.96newshd.com,https://profile.96newshd.com,https://96newshd-profile.vercel.app,http://localhost:5173,http://localhost:5174").split(",").map(value => value.trim()).filter(Boolean);
+  const origins = (process.env.CORS_ORIGINS || "https://96newshd.com,https://www.96newshd.com,https://admin.96newshd.com,https://profile.96newshd.com,https://96newshd-profile.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000").split(",").map(value => value.trim()).filter(Boolean);
   app.use(cors({ origin(origin, callback) {
     if (!origin || origins.includes(origin)) callback(null, true);
     else callback(Object.assign(new Error("Origin not allowed"), { status: 403 }));
@@ -94,6 +95,7 @@ export function createApp(services?: Services) {
   };
   app.use("/api/admin", admin);
   mountNews(app, services);
+  mountMembership(app, services);
   async function mutate(action: string, id: string | null, input: unknown, actor: { id: string; email: string }) {
     const { data, error } = await services!.db.rpc("mutate_reporter", {
       p_action: action,
@@ -327,12 +329,13 @@ export function createApp(services?: Services) {
     res.status(404).json({ error: "Endpoint not found." }),
   );
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
+    if (error.code === "INVALID_IMAGE") { res.status(400).json({ error: "Upload a valid JPG, PNG or WebP image." }); return; }
     if (error instanceof z.ZodError) { res.status(400).json({ error: "Invalid request details.", fields: error.flatten().fieldErrors }); return; }
     if (error.status === 403) { res.status(403).json({ error: "Origin not allowed." }); return; }
-    if (error.code === "PGRST202" || error.code === "42P01") { res.status(503).json({ error: "Database setup is incomplete. Run the schema setup before serving news." }); return; }
-    if (error.code === "40001") { res.status(409).json({ error: "This post changed. Reload it before saving." }); return; }
+    if (error.code === "PGRST202" || error.code === "42P01") { res.status(503).json({ error: "Database setup is incomplete. Run the schema setup before serving requests." }); return; }
+    if (error.code === "40001") { res.status(409).json({ error: "This record changed. Reload it before saving." }); return; }
     if (error.code === "23503" || error.code === "23001") { res.status(409).json({ error: "This label is in use or a referenced record no longer exists." }); return; }
-    if (error.code === "22023") { res.status(400).json({ error: "Invalid news details or labels." }); return; }
+    if (error.code === "22023") { res.status(400).json({ error: "Invalid request details." }); return; }
     if (error.code === "55000") {
       res.status(409).json({ error: "This photo is no longer available. Upload it again." });
       return;
