@@ -45,6 +45,7 @@ begin
   assert profile.expiry_date=(profile.issue_date+interval '1 year')::date, 'Card lasts one year';
   assert profile.membership_expires_at-profile.membership_started_at=interval '30 days', 'Membership lasts 30 days';
   assert profile.father_name='Applicant Father', 'Applicant father name must be used';
+  assert profile.serial_number ~ '^96N/[0-9]+/[0-9]{4}$', 'Approval must assign a serial';
   assert profile.status='active' and not profile.show_sensitive;
   assert profile.city='Lahore';
   begin perform public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":4,"father_name":"Father"}'); raise exception 'Duplicate approval accepted'; exception when serialization_failure then null; end;

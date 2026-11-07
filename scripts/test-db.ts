@@ -28,9 +28,13 @@ try {
     grant select,insert on storage.objects to authenticated;
     create policy legacy_broad_policy on storage.objects for all to authenticated using(true) with check(true);
     insert into auth.users(id) values ('11111111-1111-4111-8111-111111111111');`);
-  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql","003_membership_periods.sql","004_membership_changes.sql"])
-    sql("select set_config('news.owner_id','11111111-1111-4111-8111-111111111111',false);\n" + await readFile(new URL("../db/schema/" + file,import.meta.url),"utf8"));
-  for (const file of ["news.sql","membership.sql","membership_changes.sql"]) sql(await readFile(new URL("../tests/" + file,import.meta.url),"utf8"));
+  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql","003_membership_periods.sql","004_membership_changes.sql","005_reporter_serials.sql"])
+  {
+    if(file === "005_reporter_serials.sql") sql(`insert into public.reporters(name,father_name,designation,city,cnic,contact,whatsapp,address,issue_date,expiry_date,serial_number) values('Legacy','Father','Reporter','Lahore','35202-1111111-1','03001234567','03001234567','Private','2026-01-01','2027-01-01','96N/900/2027'),('Unassigned','Father','Reporter','Lahore','35202-1111111-2','03001234567','03001234567','Private','2026-01-01','2027-01-01','');`);
+    sql((file === "005_reporter_serials.sql" ? "begin;\n" : "") + "select set_config('news.owner_id','11111111-1111-4111-8111-111111111111',false);\n" + await readFile(new URL("../db/schema/" + file,import.meta.url),"utf8") + (file === "005_reporter_serials.sql" ? "\ncommit;" : ""));
+    if(file === "005_reporter_serials.sql") sql(`do $$ begin assert (select serial_number='96N/900/2027' from public.reporters where cnic='35202-1111111-1'); assert (select serial_number='96N/901/2027' from public.reporters where cnic='35202-1111111-2'); end $$; delete from public.reporters where cnic in ('35202-1111111-1','35202-1111111-2');`);
+  }
+  for (const file of ["news.sql","membership.sql","membership_changes.sql","serials.sql"]) sql(await readFile(new URL("../tests/" + file,import.meta.url),"utf8"));
   console.log("Local Postgres: news, membership transactions, privacy, duplicate approval and existing-profile preservation passed.");
 } finally {
   if (started) command("pg_ctl",["-D",join(directory,"db"),"-m","fast","-w","stop"]);
