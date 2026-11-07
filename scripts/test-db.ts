@@ -28,9 +28,9 @@ try {
     grant select,insert on storage.objects to authenticated;
     create policy legacy_broad_policy on storage.objects for all to authenticated using(true) with check(true);
     insert into auth.users(id) values ('11111111-1111-4111-8111-111111111111');`);
-  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql"])
+  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql","003_membership_periods.sql","004_membership_changes.sql"])
     sql("select set_config('news.owner_id','11111111-1111-4111-8111-111111111111',false);\n" + await readFile(new URL("../db/schema/" + file,import.meta.url),"utf8"));
-  for (const file of ["news.sql","membership.sql"]) sql(await readFile(new URL("../tests/" + file,import.meta.url),"utf8"));
+  for (const file of ["news.sql","membership.sql","membership_changes.sql"]) sql(await readFile(new URL("../tests/" + file,import.meta.url),"utf8"));
   console.log("Local Postgres: news, membership transactions, privacy, duplicate approval and existing-profile preservation passed.");
 } finally {
   if (started) command("pg_ctl",["-D",join(directory,"db"),"-m","fast","-w","stop"]);

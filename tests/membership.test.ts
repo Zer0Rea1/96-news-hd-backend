@@ -7,14 +7,17 @@ const settings = { enabled: false, accounts: [], instructions: "", version: 1 };
 import { applicationSchema, designationDetails, roleSchema, paymentSettingsSchema } from "../src/membership";
 const owner = "11111111-1111-4111-8111-111111111111", uid = "22222222-2222-4222-8222-222222222222", id = "33333333-3333-4333-8333-333333333333";
 const role = { id: "44444444-4444-4444-8444-444444444444", name: "رپورٹر", level: "city", fixed_province: null, fee: 4000, version: 1, active: true };
-const input = { role_id: role.id, role_version: 1, name:"Applicant",phone:"03001234567",cnic:"3520212345671",address:"Private address",role:"رپورٹر",province:"Punjab",district:"Lahore",tehsil:"",city:"Lahore" };
+const input = { role_id: role.id, role_version: 1, name:"Applicant",father_name:"Applicant Father",phone:"03001234567",cnic:"3520212345671",address:"Private address",role:"رپورٹر",province:"Punjab",district:"Lahore",tehsil:"",city:"Lahore" };
 let application: any = null, reporter: any = null, rpcError: any = null;
 const calls: any[] = [];
 const db = {
-  auth: { getUser: async (token: string) => ({ data: { user: token === "invalid" ? null : { id: token === "owner" ? owner : uid, email:"member@example.test", email_confirmed_at: token === "unverified" ? null : "2026-01-01", user_metadata: { role:"admin" }, is_anonymous:token === "anonymous" } } }) },
+  auth: { admin: {
+    listUsers: async (args: any) => { calls.push({listUsers:args}); return {data:{users:[{id:owner,email:"owner@example.test",email_confirmed_at:"2026-01-01",created_at:"2026-01-01",user_metadata:{secret:"never expose"}},{id:uid,email:"unfinished@example.test",created_at:"2026-01-02"}],total:2},error:null}; },
+    deleteUser: async (id: string) => { calls.push({deleteUser:id}); return {error:null}; }
+  }, getUser: async (token: string) => ({ data: { user: token === "invalid" ? null : { id: token === "owner" ? owner : uid, email:"member@example.test", email_confirmed_at: token === "unverified" ? null : "2026-01-01", user_metadata: { role:"admin" }, is_anonymous:token === "anonymous" } } }) },
   from(table: string) {
     const filters: Record<string,unknown> = {};
-    const query: any = { select:()=>query, single:()=>query.maybeSingle(), order:()=>query, then:(resolve: any)=>Promise.resolve({data:[role],error:null}).then(resolve), eq:(key: string,value: unknown)=>{filters[key]=value; return query;}, maybeSingle: async()=>({data: structuredClone(table === "membership_payment_settings" ? settings : table === "membership_roles" ? (filters.id && filters.id !== role.id ? null : role) : table === "reporters" ? reporter : application && (!filters.user_id || filters.user_id === application.user_id) ? application : null),error:null}) }; return query;
+    const query: any = { select:()=>query, in:()=>query, single:()=>query.maybeSingle(), order:()=>query, then:(resolve: any)=>Promise.resolve({data:table === "membership_applications" ? (application ? [application] : []) : table === "reporters" ? (reporter ? [reporter] : []) : [role],error:null}).then(resolve), eq:(key: string,value: unknown)=>{filters[key]=value; return query;}, maybeSingle: async()=>({data: structuredClone(table === "membership_payment_settings" ? settings : table === "membership_roles" ? (filters.id && filters.id !== role.id ? null : role) : table === "reporters" ? reporter : application && (!filters.user_id || filters.user_id === application.user_id) ? application : null),error:null}) }; return query;
   },
   rpc: async (name: string,args: any) => { calls.push({name,args}); return {data: structuredClone({id,user_id:uid,details:input,status: name === "submit_membership_payment" ? "pending" : "awaiting_payment",fee:4000,photo_path:args.p_photo_path || null,proof_path:"private/path.webp",version:1}),error:rpcError}; },
   storage: { from:(name: string)=>({ upload:async(path: string)=>{calls.push({storage:name,path}); return {error:null};},remove:async(paths: string[])=>{calls.push({remove:paths}); return {error:null};},createSignedUrl:async(path: string,seconds: number)=>{calls.push({signed:path,seconds}); return {data:{signedUrl:"https://local.example.test/private?token=temporary"},error:null};} }) },
@@ -103,4 +106,47 @@ test("only owner may edit payment settings and enabled collection needs a receiv
  expect((await request("/api/admin/membership/payment-settings","member")).status).toBe(403);
  const response=await fetch(origin+"/api/admin/membership/payment-settings",{method:"PUT",headers:{Authorization:"Bearer owner","Content-Type":"application/json"},body:JSON.stringify(value)});
  expect(response.status).toBe(200); expect(calls.at(-1).args).toMatchObject({p_actor:owner,p_input:value});
+});
+
+import { credentialStatus } from "../src/profiles/domain";
+test("unpaid membership revokes a card at the exact deadline while legacy cards keep their own dates", () => {
+ const r={status:"active" as const,issue_date:"2026-01-01",expiry_date:"2027-01-01",membership_expires_at:"2026-11-07T12:00:00Z"};
+ expect(credentialStatus(r,"2026-11-07",Date.parse("2026-11-07T11:59:59Z"))).toBe("active");
+ expect(credentialStatus(r,"2026-11-07",Date.parse(r.membership_expires_at))).toBe("revoked");
+ expect(credentialStatus({...r,membership_expires_at:null},"2026-11-07")).toBe("active");
+});
+
+test("account directory includes incomplete users, excludes auth metadata and remains owner-only", async () => {
+ expect((await request("/api/admin/accounts","member")).status).toBe(403);
+ const response=await request("/api/admin/accounts?page=2","owner"); expect(response.status).toBe(200);
+ const data=await response.json(); expect(data.total).toBe(2); expect(data.accounts[1]).toMatchObject({email:"unfinished@example.test",email_verified:false,application_status:null});
+ expect(JSON.stringify(data)).not.toMatch(/never expose|user_metadata|identities/);
+ expect(calls.at(-1)).toEqual({listUsers:{page:2,perPage:50}});
+ expect((await request("/api/admin/accounts?page=bad","owner")).status).toBe(400);
+});
+test("only owner can delete a login and the owner account is protected", async () => {
+ for (const [token,target,status] of [["member",uid,403],["owner",owner,403],["owner","bad",400],["owner",uid,204]] as const) {
+  const response=await fetch(origin+"/api/admin/accounts/"+target,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}}); expect(response.status).toBe(status);
+ }
+ expect(calls).toEqual([{deleteUser:uid}]);
+});
+test("an existing CNIC is rejected before any application or upload is created",async()=>{
+ reporter={id}; const response=await request("/api/member/application","member",input); expect(response.status).toBe(409); expect(calls).toHaveLength(0);
+});
+
+test("role change accepts only a versioned role selection, binds identity and cannot change area or price",async()=>{
+ const payload={version:1,role_id:role.id,role_version:1};
+ expect((await request("/api/member/designation-change","owner",payload)).status).toBe(403);
+ for(const field of [{city:"Karachi"},{designation_area:"Karachi"},{fee:1},{user_id:owner},{expiry_date:"2099-01-01"}]) expect((await request("/api/member/designation-change","member",{...payload,...field})).status).toBe(400);
+ expect((await request("/api/member/designation-change","member",payload)).status).toBe(200);
+ expect(calls.at(-1)).toEqual({name:"request_member_designation",args:{p_user_id:uid,p_version:1,p_role_id:role.id,p_role_version:1}});
+ rpcError={code:"40001"};expect((await request("/api/member/designation-change","member",payload)).status).toBe(409);
+});
+test("free renewal is owner-only, versioned and requires a reason without arbitrary dates",async()=>{
+ const path=`/api/admin/applications/${id}/renew`, payload={version:1,reason:"Owner waiver"};
+ expect((await request(path,"member",payload)).status).toBe(403);
+ expect((await request(path,"owner",{...payload,expiry_date:"2099-01-01"})).status).toBe(400);
+ expect((await request(path,"owner",{...payload,reason:""})).status).toBe(400);
+ expect((await request(path,"owner",payload)).status).toBe(200);
+ expect(calls.at(-1)).toMatchObject({name:"renew_membership_without_payment",args:{p_id:id,p_actor:owner,p_version:1,p_reason:"Owner waiver"}});
 });

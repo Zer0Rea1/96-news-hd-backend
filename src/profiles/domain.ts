@@ -65,21 +65,25 @@ export type Reporter = ReporterInput & {
   card_number: number;
   created_at: string;
   updated_at: string;
+  membership_started_at?: string | null;
+  membership_expires_at?: string | null;
 };
 export type PublicReporter = Omit<
   Reporter,
   "cnic" | "address" | "show_sensitive"
 > & { cnic?: string; address?: string };
 export function credentialStatus(
-  reporter: Pick<ReporterInput, "status" | "issue_date" | "expiry_date">,
+  reporter: Pick<ReporterInput, "status" | "issue_date" | "expiry_date"> & { membership_expires_at?: string | null },
   today = new Date().toISOString().slice(0, 10),
+  now = Date.now(),
 ) {
   if (reporter.status !== "active") return reporter.status;
+  if (reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) <= now) return "revoked";
   if (reporter.issue_date > today) return "scheduled";
   return reporter.expiry_date < today ? "expired" : "active";
 }
 export function expiringSoon(
-  reporter: Pick<ReporterInput, "status" | "issue_date" | "expiry_date">,
+  reporter: Pick<ReporterInput, "status" | "issue_date" | "expiry_date"> & { membership_expires_at?: string | null },
   today = new Date().toISOString().slice(0, 10),
 ) {
   if (credentialStatus(reporter, today) !== "active") return false;

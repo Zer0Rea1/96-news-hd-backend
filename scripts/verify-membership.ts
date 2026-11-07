@@ -36,7 +36,7 @@ try {
   const ownerSigned=await ownerAuth.auth.signInWithPassword({email:owner.email,password:owner.password});assert.equal(ownerSigned.error,null); const ownerToken=ownerSigned.data.session!.access_token;
   const catalog=await(await fetch(origin+"/api/membership/options")).json();assert(catalog.roles.length > 0);
   const role=catalog.roles.find((r: any)=>r.level==="city" && !r.fixed_province);assert(role,"Keep a city-level role available for this smoke test");
-  const details={name:"Local smoke applicant",phone:"03001234567",cnic:`99999-${String(Date.now()).slice(-7)}-9`,address:"Test-only private address",role:role.name,role_id:role.id,role_version:role.version,province:"Punjab",district:"Lahore",tehsil:"",city:"Lahore"};
+  const details={name:"Local smoke applicant",father_name:"Test Father",phone:"03001234567",cnic:`99999-${String(Date.now()).slice(-7)}-9`,address:"Test-only private address",role:role.name,role_id:role.id,role_version:role.version,province:"Punjab",district:"Lahore",tehsil:"",city:"Lahore"};
   assert.equal((await request("/api/member/application",token,{...details,fee:1})).status,400);
   const image=await sharp({create:{width:10,height:10,channels:3,background:"white"}}).png().toBuffer();
   const form=new FormData();form.set("details",JSON.stringify(details));form.set("photo",new Blob([image],{type:"image/png"}),"portrait.png");
@@ -50,8 +50,8 @@ try {
   const proofResponse=await request(`/api/admin/applications/${a.id}/proof`,ownerToken);assert.equal(proofResponse.status,200);const proof=await proofResponse.json();assert.equal((await fetch(proof.url)).status,200);
   const rejected=await request(`/api/admin/applications/${a.id}/decision`,ownerToken,{decision:"reject",version:a.version,reason:"Local test rejection"});assert.equal(rejected.status,200,await rejected.clone().text());a=await rejected.json();
   paid=await receipt(a.version);assert.equal(paid.status,200,await paid.clone().text());a=await paid.json();
-  const approved=await request(`/api/admin/applications/${a.id}/decision`,ownerToken,{decision:"approve",version:a.version,father_name:"Test Father"});assert.equal(approved.status,200,await approved.clone().text());const approvedBody=await approved.json();reporterId=approvedBody.reporter_id;assert(reporterId);
-  assert.equal((await request(`/api/admin/applications/${a.id}/decision`,ownerToken,{decision:"approve",version:a.version,father_name:"Test Father"})).status,409);
+  const approved=await request(`/api/admin/applications/${a.id}/decision`,ownerToken,{decision:"approve",version:a.version});assert.equal(approved.status,200,await approved.clone().text());const approvedBody=await approved.json();reporterId=approvedBody.reporter_id;assert(reporterId);
+  assert.equal((await request(`/api/admin/applications/${a.id}/decision`,ownerToken,{decision:"approve",version:a.version})).status,409);
   const profile=await request("/api/member/profile",token);assert.equal(profile.status,200);const account=await profile.json();assert.equal(account.reporter.id,reporterId);assert.equal((Date.parse(account.membership.expiry_date)-Date.parse(account.membership.issue_date))/86400000,30);assert.equal(account.profile_url,`https://profile.96newshd.com/p/${reporterId}`);
   const publicProfile=await(await fetch(origin+`/api/profiles/${reporterId}`)).json();assert(!publicProfile.cnic&&!publicProfile.address,"Public profile must omit private identity data");
   console.log("PASS: real local Supabase signup/confirmation, role quote, private uploads, owner rejection/resubmission/approval, permanent profile, member access and public privacy.");

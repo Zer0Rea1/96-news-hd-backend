@@ -13,7 +13,7 @@ do $$ begin
 end $$;
 set local role service_role;
 do $$
-declare role_id uuid; a jsonb; b jsonb; original jsonb; profile public.reporters; owner uuid='11111111-1111-4111-8111-111111111111'; uid uuid='22222222-2222-4222-8222-222222222222'; outsider uuid='33333333-3333-4333-8333-333333333333'; details jsonb='{"name":"New Member","phone":"03001234567","cnic":"35202-1234567-1","address":"Private address","role":"رپورٹر","designation_area":"Lahore"}';
+declare role_id uuid; a jsonb; b jsonb; original jsonb; profile public.reporters; owner uuid='11111111-1111-4111-8111-111111111111'; uid uuid='22222222-2222-4222-8222-222222222222'; outsider uuid='33333333-3333-4333-8333-333333333333'; details jsonb='{"name":"New Member","father_name":"Applicant Father","phone":"03001234567","cnic":"35202-1234567-1","address":"Private address","role":"رپورٹر","designation_area":"Lahore"}';
 begin
   select to_jsonb(r) into original from public.reporters r where id='88888888-8888-4888-8888-888888888888';
   assert (select relrowsecurity from pg_class where oid='public.membership_applications'::regclass);
@@ -42,13 +42,23 @@ begin
   assert a->>'status'='pending' and a->>'rejection_reason'='';
   a=public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":4,"father_name":"Verified Father"}');
   select * into profile from public.reporters where id=(a->>'reporter_id')::uuid;
-  assert profile.expiry_date-profile.issue_date=30, 'Membership lasts 30 days';
+  assert profile.expiry_date=(profile.issue_date+interval '1 year')::date, 'Card lasts one year';
+  assert profile.membership_expires_at-profile.membership_started_at=interval '30 days', 'Membership lasts 30 days';
+  assert profile.father_name='Applicant Father', 'Applicant father name must be used';
   assert profile.status='active' and not profile.show_sensitive;
   assert profile.city='Lahore';
   begin perform public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":4,"father_name":"Father"}'); raise exception 'Duplicate approval accepted'; exception when serialization_failure then null; end;
   assert (select count(*) from public.reporters)=2, 'Approval must create exactly one new credential';
   assert (select to_jsonb(r)=original from public.reporters r where id='88888888-8888-4888-8888-888888888888'), 'Existing profile and printed UUID must remain unchanged';
   assert (select count(*) from public.membership_reviews)=2;
+  begin perform public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test',jsonb_build_object('decision','approve','version',a->'version')); raise exception 'Renewed without payment'; exception when serialization_failure then null; end;
+  a=public.submit_membership_payment(uid,(a->>'version')::integer,a->>'id'||'/renewal.webp');
+  assert a->>'status'='approved' and a->>'renewal_status'='pending';
+  a=public.review_membership_application((a->>'id')::uuid,owner,'owner@example.test',jsonb_build_object('decision','approve','version',a->'version'));
+  assert a->>'reporter_id'=profile.id::text and a->>'renewal_status' is null;
+  assert (select count(*)=2 from public.reporters), 'Renewal cannot create another card';
+  assert (select membership_expires_at=profile.membership_expires_at+interval '30 days' from public.reporters where id=profile.id);
+
   begin perform public.save_membership_role(outsider,role_id,'{"name":"Bad","level":"city","fee":1,"fixed_province":null,"active":true,"version":1}'); raise exception 'Member changed role'; exception when insufficient_privilege then null; end;
   perform public.save_membership_role(owner,role_id,'{"name":"Updated Reporter","level":"district","fee":5000,"fixed_province":null,"active":true,"version":1}');
   assert (select m.fee=4000 and m.details->>'role'='رپورٹر' from public.membership_applications m where m.user_id=uid), 'Catalog edits cannot rewrite submitted prices or roles';
@@ -58,4 +68,7 @@ begin
   begin perform public.review_membership_application((b->>'id')::uuid,owner,'owner@example.test','{"decision":"approve","version":2,"father_name":"Father"}'); raise exception 'Existing CNIC was overwritten'; exception when unique_violation then null; end;
   assert (select status='pending' from public.membership_applications where user_id=outsider), 'Failed approval must leave review retryable';
 end $$;
+reset role;
+delete from auth.users where id='22222222-2222-4222-8222-222222222222';
+do $$ begin assert exists(select 1 from public.membership_applications where user_id is null and status='approved'); assert (select count(*)=2 from public.reporters); end $$;
 rollback;

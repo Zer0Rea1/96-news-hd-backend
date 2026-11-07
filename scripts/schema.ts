@@ -4,7 +4,7 @@ import { z } from "zod";
 import { databaseClient, reportFailure } from "./database.js";
 async function main() {
   const owner = z.uuid().parse(process.env.OWNER_USER_ID);
-  const migrations = await Promise.all(["001_news", "002_membership"].map(async version => {
+  const migrations = await Promise.all(["001_news", "002_membership", "003_membership_periods", "004_membership_changes"].map(async version => {
     const sql = await readFile(new URL(`../db/schema/${version}.sql`, import.meta.url), "utf8");
     return { version, sql, hash: createHash("sha256").update(sql).digest("hex") };
   }));

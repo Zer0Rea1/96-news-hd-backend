@@ -8,13 +8,14 @@ import { credentialStatus } from "./profiles/domain.js";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 export const applicationSchema = z.object({
-  name: text(100), phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,25}$/).refine(v => /^\+?\d{7,15}$/.test(v.replace(/[ ()-]/g, ""))),
+  name: text(100), father_name: text(100), phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,25}$/).refine(v => /^\+?\d{7,15}$/.test(v.replace(/[ ()-]/g, ""))),
   cnic: z.string().trim().regex(/^(?:\d{13}|\d{5}-\d{7}-\d)$/).transform(v => v.replace(/^(\d{5})(\d{7})(\d)$/, "$1-$2-$3")),
   address: text(500), role: text(100), role_id: z.uuid(), role_version: z.number().int().positive(),
   province: z.enum(["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Azad Kashmir", "Gilgit Baltistan", "Islamabad"]), district: z.string().trim().max(100), tehsil: z.string().trim().max(100), city: z.string().trim().max(100),
 
 }).strict();
 export const roleSchema = z.object({ name: text(100), level: z.enum(["province", "district", "tehsil", "city"]), fee: z.number().int().min(1).max(1000000), fixed_province: z.enum(["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Azad Kashmir", "Gilgit Baltistan", "Islamabad"]).nullable(), active: z.boolean() }).strict();
+export const designationChangeSchema = z.object({ role_id: z.uuid(), role_version: z.number().int().positive(), version: z.number().int().positive() }).strict();
 export function designationDetails(details: z.infer<typeof applicationSchema>, role: { name: string; level: string; fixed_province: string | null }) {
   const { role_id: _id, role_version: _version, ...input } = details;
   if (role.fixed_province && input.province !== role.fixed_province) throw new z.ZodError([{ code: "custom", path: ["province"], message: "Choose the role's fixed province." }]);
@@ -25,7 +26,7 @@ export function designationDetails(details: z.infer<typeof applicationSchema>, r
 export const paymentSettingsSchema = z.object({ enabled: z.boolean(), version: z.number().int().positive(), accounts: z.array(z.object({ name: text(100), number: text(100), title: text(200) }).strict()).max(10), instructions: z.string().trim().max(2000) }).strict().refine(v => !v.enabled || v.accounts.length > 0, "Add a receiving account before enabling payments");
 const version = z.number().int().positive();
 const decisionSchema = z.discriminatedUnion("decision", [
-  z.object({ decision: z.literal("approve"), version, father_name: text(100) }).strict(),
+  z.object({ decision: z.literal("approve"), version }).strict(),
   z.object({ decision: z.literal("reject"), version, reason: text(1000) }).strict(),
 ]);
 const bucket = "membership-private";
@@ -89,6 +90,14 @@ export function mountMembership(app: Express, services?: Services) {
       res.json(application);
     } catch (e) { next(e); }
   });
+  app.patch("/api/member/application/father", async (req, res, next) => {
+    try {
+      const input = z.object({ version, father_name: text(100) }).strict().parse(req.body);
+      const { data, error } = await db!.rpc("complete_application_father", { p_user_id: res.locals.member.id, p_version: input.version, p_father: input.father_name });
+      if (error) throw error;
+      res.json(data);
+    } catch (e) { next(e); }
+  });
   app.post("/api/member/application", upload.single("photo"), async (req, res, next) => {
     let path: string | undefined;
     try {
@@ -99,6 +108,9 @@ export function mountMembership(app: Express, services?: Services) {
       const details = designationDetails(input, role);
       const existing = await own(res.locals.member.id);
       if (existing) { delete existing.proof_path; delete existing.photo_path; res.json(existing); return; }
+      const { data: duplicate, error: duplicateError } = await db!.from("reporters").select("id").eq("cnic", details.cnic).maybeSingle();
+      if (duplicateError) throw duplicateError;
+      if (duplicate) { res.status(409).json({ error: "A reporter with this CNIC already exists. Contact the newsroom before making a payment." }); return; }
       if (req.file) {
         if (!["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) { res.status(400).json({ error: "Upload a JPG, PNG or WebP portrait." }); return; }
         const buffer = await privateImage(req.file.buffer, 1200, 1600);
@@ -118,12 +130,28 @@ export function mountMembership(app: Express, services?: Services) {
       next(e);
     }
   });
+  app.post("/api/member/designation-change", async (req, res, next) => {
+    try {
+      const input = designationChangeSchema.parse(req.body);
+      const { data, error } = await db!.rpc("request_member_designation", { p_user_id: res.locals.member.id, p_version: input.version, p_role_id: input.role_id, p_role_version: input.role_version });
+      if (error) throw error;
+      res.json(data);
+    } catch (e) { next(e); }
+  });
+  app.delete("/api/member/designation-change", async (req, res, next) => {
+    try {
+      const input = z.object({ version }).strict().parse(req.body);
+      const { data, error } = await db!.rpc("cancel_member_designation", { p_user_id: res.locals.member.id, p_version: input.version });
+      if (error) throw error;
+      res.json(data);
+    } catch (e) { next(e); }
+  });
   app.post("/api/member/payment", upload.single("proof"), async (req, res, next) => {
     let path: string | undefined;
     try {
       if (!(await paymentSettings()).enabled) { res.status(503).json({ error: "Payment collection is not open yet." }); return; }
       const application = await own(res.locals.member.id);
-      if (!application || !["awaiting_payment", "rejected"].includes(application.status)) { res.status(409).json({ error: "This application cannot accept another payment proof." }); return; }
+      if (!application || (!["awaiting_payment", "rejected", "approved"].includes(application.status) || application.renewal_status === "pending")) { res.status(409).json({ error: "This application cannot accept another payment proof." }); return; }
       const inputVersion = z.coerce.number().int().positive().parse(req.body.version);
       if (inputVersion !== application.version) { res.status(409).json({ error: "Reload the application before uploading." }); return; }
       if (!req.file || !["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) { res.status(400).json({ error: "Upload a JPG, PNG or WebP receipt, up to 4 MB." }); return; }
@@ -148,14 +176,54 @@ export function mountMembership(app: Express, services?: Services) {
       const { data: reporter, error } = await db!.from("reporters").select("*").eq("id", application.reporter_id).maybeSingle();
       if (error) throw error;
       if (!reporter || reporter.status === "draft") { res.status(403).json({ error: "Your profile is unavailable. Contact the newsroom." }); return; }
-      res.json({ reporter, membership: { status: credentialStatus(reporter), issue_date: reporter.issue_date, expiry_date: reporter.expiry_date, fee: application.fee, currency: "PKR" }, profile_url: `https://profile.96newshd.com/p/${reporter.id}` });
+      res.json({ reporter, membership: { status: reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) > Date.now() ? "active" : "expired", issue_date: reporter.membership_started_at, expiry_date: reporter.membership_expires_at, fee: application.fee, currency: "PKR" }, profile_url: `https://profile.96newshd.com/p/${reporter.id}` });
     } catch (e) { next(e); }
   });
   // /api/admin is already protected by the shared owner guard.
+  app.delete("/api/admin/accounts/:id", async (req, res, next) => {
+    try {
+      const id = z.uuid().parse(req.params.id);
+      if (id === services!.ownerId) { res.status(403).json({ error: "The owner account cannot be deleted." }); return; }
+      const { error } = await db!.auth.admin.deleteUser(id);
+      if (error) throw error;
+      res.status(204).end();
+    } catch (e) { next(e); }
+  });
+  app.get("/api/admin/accounts", async (req, res, next) => {
+    try {
+      const page = z.coerce.number().int().min(1).max(100000).parse(req.query.page ?? 1);
+      const { data, error } = await db!.auth.admin.listUsers({ page, perPage: 50 });
+      if (error) throw error;
+      const users = data.users;
+      const { data: applications, error: applicationError } = users.length
+        ? await db!.from("membership_applications").select("user_id,status,renewal_status,reporter_id").in("user_id", users.map(user => user.id))
+        : { data: [], error: null };
+      if (applicationError) throw applicationError;
+      const ids = (applications || []).map(a => a.reporter_id).filter(Boolean);
+      const { data: reporters, error: reporterError } = ids.length
+        ? await db!.from("reporters").select("id,name,status,issue_date,expiry_date,membership_expires_at").in("id", ids)
+        : { data: [], error: null };
+      if (reporterError) throw reporterError;
+      const apps = new Map((applications || []).map(a => [a.user_id, a]));
+      const profiles = new Map((reporters || []).map(r => [r.id, r]));
+      res.set("Cache-Control", "private, no-store").json({ total: data.total, page, accounts: users.map(user => {
+        const application = apps.get(user.id);
+        const reporter = application?.reporter_id ? profiles.get(application.reporter_id) : null;
+        return { id: user.id, email: user.email || null, phone: user.phone || null, email_verified: Boolean(user.email_confirmed_at),
+          created_at: user.created_at, last_sign_in_at: user.last_sign_in_at || null, owner: user.id === services!.ownerId,
+          application_status: application?.status || null, renewal_status: application?.renewal_status || null,
+          reporter_id: reporter?.id || null, name: reporter?.name || null,
+          membership_expires_at: reporter?.membership_expires_at || null,
+          membership_status: reporter ? (reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) > Date.now() ? "active" : "expired") : null,
+          card_status: reporter ? credentialStatus(reporter) : null, card_expiry_date: reporter?.expiry_date || null };
+      }) });
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/admin/applications", async (req, res, next) => {
     try {
       const page = z.coerce.number().int().min(1).max(100000).parse(req.query.page ?? 1);
-      const { data, count, error } = await db!.from("membership_applications").select("id,user_id,email,details,fee,status,rejection_reason,reporter_id,version,created_at,reviewed_at", { count: "exact" }).order("created_at", { ascending: false }).order("id").range((page - 1) * 50, page * 50 - 1);
+      const { data, count, error } = await db!.from("membership_applications").select("id,user_id,email,details,fee,status,renewal_status,pending_designation,rejection_reason,reporter_id,version,created_at,reviewed_at", { count: "exact" }).order("created_at", { ascending: false }).order("id").range((page - 1) * 50, page * 50 - 1);
       if (error) throw error;
       res.json({ applications: data, total: count });
     } catch (e) { next(e); }
@@ -173,16 +241,25 @@ export function mountMembership(app: Express, services?: Services) {
       res.json({ url: signed!.signedUrl });
     } catch (e) { next(e); }
   });
+  app.post("/api/admin/applications/:id/renew", async (req, res, next) => {
+    try {
+      const input = z.object({ version, reason: text(1000) }).strict().parse(req.body);
+      const { data, error } = await db!.rpc("renew_membership_without_payment", { p_id: z.uuid().parse(req.params.id), p_actor: res.locals.actor.id, p_actor_email: res.locals.actor.email, p_version: input.version, p_reason: input.reason });
+      if (error) throw error;
+      res.json(data);
+    } catch (e) { next(e); }
+  });
   app.post("/api/admin/applications/:id/decision", async (req, res, next) => {
     try {
       const id = z.uuid().parse(req.params.id);
       const input = decisionSchema.parse(req.body);
       let photoUrl = "";
       if (input.decision === "approve") {
-        const { data: application, error } = await db!.from("membership_applications").select("status,version,photo_path").eq("id", id).maybeSingle();
+        const { data: application, error } = await db!.from("membership_applications").select("status,renewal_status,version,photo_path,details").eq("id", id).maybeSingle();
         if (error) throw error;
-        if (!application || application.status !== "pending" || application.version !== input.version) { res.status(409).json({ error: "Reload this application before reviewing." }); return; }
-        if (application.photo_path) {
+        if (!application || (application.status !== "pending" && !(application.status === "approved" && application.renewal_status === "pending")) || application.version !== input.version) { res.status(409).json({ error: "Reload this application before reviewing." }); return; }
+        if (application.status !== "approved" && !application.details?.father_name?.trim()) { res.status(409).json({ error: "The applicant must add their father’s name before approval." }); return; }
+        if (application.photo_path && application.status !== "approved") {
           const { data: photo, error: downloadError } = await db!.storage.from(bucket).download(application.photo_path);
           if (downloadError) throw downloadError;
           photoUrl = await services!.upload(Buffer.from(await photo!.arrayBuffer()));
