@@ -30,7 +30,7 @@ export function createApp(services?: Services) {
   app.use(cors({ origin(origin, callback) {
     if (!origin || origins.includes(origin)) callback(null, true);
     else callback(Object.assign(new Error("Origin not allowed"), { status: 403 }));
-  }, credentials: false, methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "If-Match"], maxAge: 600 }));
+  }, credentials: false, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "If-Match"], maxAge: 600 }));
   if (process.env.VERCEL) app.set("trust proxy", 1);
   app.use(
     helmet({

@@ -2,6 +2,7 @@ import type { Express, RequestHandler } from "express";
 import type { Services } from "./app.js";
 import { z } from "zod";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 import { credentialStatus } from "./profiles/domain.js";
@@ -76,6 +77,37 @@ export function mountMembership(app: Express, services?: Services) {
   });
   app.put("/api/admin/membership/roles/:id", async (req, res, next) => {
     try { const input = roleSchema.extend({ version: z.number().int().positive() }).parse(req.body); const { data, error } = await db!.rpc("save_membership_role", { p_actor: res.locals.actor.id, p_id: z.uuid().parse(req.params.id), p_input: input }); if (error) throw error; res.json(data); } catch (e) { next(e); }
+  });
+  app.post("/api/membership/signup-form", rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false }), upload.single("photo"), async (req, res, next) => {
+    let path: string | undefined;
+    try {
+      const raw = JSON.parse(req.body.details || "null");
+      const input = applicationSchema.parse(raw);
+      const email = z.email().max(254).parse(req.body.email).toLowerCase();
+      const { data: role, error: roleError } = await db!.from("membership_roles").select("*").eq("id", input.role_id).eq("active", true).maybeSingle();
+      if (roleError) throw roleError;
+      if (!role || role.version !== input.role_version) { res.status(409).json({ error: "The role or fee changed. Reload the form before signing up." }); return; }
+      const details = designationDetails(input, role);
+      const { data: duplicate, error: duplicateError } = await db!.from("reporters").select("id").eq("cnic", details.cnic).maybeSingle();
+      if (duplicateError) throw duplicateError;
+      if (duplicate) { res.status(409).json({ error: "A reporter with this CNIC already exists. Contact the newsroom." }); return; }
+      const id = randomUUID();
+      if (req.file) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) { res.status(400).json({ error: "Upload a JPG, PNG or WebP portrait." }); return; }
+        const buffer = await privateImage(req.file.buffer, 1200, 1600);
+        path = `signup/${id}/${randomUUID()}.webp`;
+        const { error } = await db!.storage.from(bucket).upload(path, buffer, { contentType: "image/webp", upsert: false });
+        if (error) throw error;
+      }
+      const { data, error } = await db!.rpc("save_membership_signup_form", { p_id: id, p_email: email, p_details: details, p_role_id: role.id, p_role_version: input.role_version, p_photo_path: path || null });
+      if (error) throw error;
+      path = undefined;
+      res.status(201).json(data);
+    } catch (e) {
+      if (path) await db!.storage.from(bucket).remove([path]).catch(() => undefined);
+      if (e instanceof SyntaxError) { res.status(400).json({ error: "Invalid application details." }); return; }
+      next(e);
+    }
   });
   app.use("/api/member", member);
   async function own(userId: string) {
@@ -196,7 +228,7 @@ export function mountMembership(app: Express, services?: Services) {
       if (error) throw error;
       const users = data.users;
       const { data: applications, error: applicationError } = users.length
-        ? await db!.from("membership_applications").select("user_id,status,renewal_status,reporter_id").in("user_id", users.map(user => user.id))
+        ? await db!.from("membership_applications").select("user_id,status,renewal_status,reporter_id,details").in("user_id", users.map(user => user.id))
         : { data: [], error: null };
       if (applicationError) throw applicationError;
       const ids = (applications || []).map(a => a.reporter_id).filter(Boolean);
@@ -209,10 +241,10 @@ export function mountMembership(app: Express, services?: Services) {
       res.set("Cache-Control", "private, no-store").json({ total: data.total, page, accounts: users.map(user => {
         const application = apps.get(user.id);
         const reporter = application?.reporter_id ? profiles.get(application.reporter_id) : null;
-        return { id: user.id, email: user.email || null, phone: user.phone || null, email_verified: Boolean(user.email_confirmed_at),
+        return { id: user.id, email: user.email || null, phone: application?.details?.phone || user.phone || null, email_verified: Boolean(user.email_confirmed_at),
           created_at: user.created_at, last_sign_in_at: user.last_sign_in_at || null, owner: user.id === services!.ownerId,
           application_status: application?.status || null, renewal_status: application?.renewal_status || null,
-          reporter_id: reporter?.id || null, name: reporter?.name || null,
+          reporter_id: reporter?.id || null, name: reporter?.name || application?.details?.name || null,
           membership_expires_at: reporter?.membership_expires_at || null,
           membership_status: reporter ? (reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) > Date.now() ? "active" : "expired") : null,
           card_status: reporter ? credentialStatus(reporter) : null, card_expiry_date: reporter?.expiry_date || null };

@@ -19,7 +19,7 @@ const db = {
     const filters: Record<string,unknown> = {};
     const query: any = { select:()=>query, in:()=>query, single:()=>query.maybeSingle(), order:()=>query, then:(resolve: any)=>Promise.resolve({data:table === "membership_applications" ? (application ? [application] : []) : table === "reporters" ? (reporter ? [reporter] : []) : [role],error:null}).then(resolve), eq:(key: string,value: unknown)=>{filters[key]=value; return query;}, maybeSingle: async()=>({data: structuredClone(table === "membership_payment_settings" ? settings : table === "membership_roles" ? (filters.id && filters.id !== role.id ? null : role) : table === "reporters" ? reporter : application && (!filters.user_id || filters.user_id === application.user_id) ? application : null),error:null}) }; return query;
   },
-  rpc: async (name: string,args: any) => { calls.push({name,args}); return {data: structuredClone({id,user_id:uid,details:input,status: name === "submit_membership_payment" ? "pending" : "awaiting_payment",fee:4000,photo_path:args.p_photo_path || null,proof_path:"private/path.webp",version:1}),error:rpcError}; },
+  rpc: async (name: string,args: any) => { calls.push({name,args}); if(name === "save_membership_signup_form") return {data:{token:args.p_id,expires_at:"2099-01-01T00:00:00Z"},error:rpcError}; return {data: structuredClone({id,user_id:uid,details:input,status: name === "submit_membership_payment" ? "pending" : "awaiting_payment",fee:4000,photo_path:args.p_photo_path || null,proof_path:"private/path.webp",version:1}),error:rpcError}; },
   storage: { from:(name: string)=>({ upload:async(path: string)=>{calls.push({storage:name,path}); return {error:null};},remove:async(paths: string[])=>{calls.push({remove:paths}); return {error:null};},createSignedUrl:async(path: string,seconds: number)=>{calls.push({signed:path,seconds}); return {data:{signedUrl:"https://local.example.test/private?token=temporary"},error:null};} }) },
 } as unknown as SupabaseClient;
 const server=createApp({db,ownerId:owner,upload:async()=>"https://res.cloudinary.com/test/image/upload/a.webp"}).listen(0,"127.0.0.1");
@@ -149,4 +149,15 @@ test("free renewal is owner-only, versioned and requires a reason without arbitr
  expect((await request(path,"owner",{...payload,reason:""})).status).toBe(400);
  expect((await request(path,"owner",payload)).status).toBe(200);
  expect(calls.at(-1)).toMatchObject({name:"renew_membership_without_payment",args:{p_id:id,p_actor:owner,p_version:1,p_reason:"Owner waiver"}});
+});
+
+test("signup form is validated and stored privately before Auth with server fee and no passwords",async()=>{
+ function form(details:any=input){const body=new FormData();body.set("details",JSON.stringify(details));body.set("email","NEW@example.test");return body;}
+ for(const details of [{...input,father_name:""},{...input,fee:1},{...input,status:"approved"}])expect((await request("/api/membership/signup-form",undefined,form(details))).status).toBe(400);
+ const response=await request("/api/membership/signup-form",undefined,form());expect(response.status).toBe(201);const data=await response.json();expect(data.token).toMatch(/^[0-9a-f-]{36}$/);expect(data).not.toHaveProperty("details");expect(data).not.toHaveProperty("photo_path");
+ expect(calls.at(-1)).toMatchObject({name:"save_membership_signup_form",args:{p_email:"new@example.test",p_role_id:role.id,p_role_version:1,p_details:{name:"Applicant",phone:"03001234567",father_name:"Applicant Father"}}});
+});
+test("admin can see an unverified applicant's submitted phone before payment or profile creation",async()=>{
+ application={user_id:uid,status:"awaiting_payment",details:{name:"Unverified applicant",phone:"03001234567"}};
+ const data=await(await request("/api/admin/accounts","owner")).json();expect(data.accounts.find((a:any)=>a.id===uid)).toMatchObject({name:"Unverified applicant",phone:"03001234567",email_verified:false,application_status:"awaiting_payment",reporter_id:null});
 });
