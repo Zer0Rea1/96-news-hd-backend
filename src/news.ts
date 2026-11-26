@@ -91,7 +91,7 @@ export function mountNews(app: Express, services?: Services) {
     }
     const article = cleanArticle(parsed.article);
     if (!article.replace(/<[^>]*>/g, "").trim()) { res.status(400).json({ error: "Enter article text." }); return; }
-    const input = { title: parsed.title, thumbnailImage: parsed.thumbnailImage, tags: parsed.tags, status: parsed.status, article, author_name: "96 نیوز ایچ ڈی", ...(action === "create" ? { slug: postSlug(parsed.title, id) } : {}) };
+    const input = { title: parsed.title, thumbnailImage: parsed.thumbnailImage, tags: parsed.tags, status: parsed.status, article, author_name: parsed.authorname || "96 News Desk", ...(action === "create" ? { slug: postSlug(parsed.title, id) } : {}) };
     const { data, error } = await db!.rpc("mutate_news_post", {
       p_action: action, p_id: previous?.id || id, p_actor_id: res.locals.actor.id,
       p_input: input, p_expected_version: action === "update" ? (parsed as z.infer<typeof postUpdateSchema>).version : null,

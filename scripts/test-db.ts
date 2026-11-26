@@ -29,7 +29,7 @@ try {
     grant select,insert on storage.objects to authenticated;
     create policy legacy_broad_policy on storage.objects for all to authenticated using(true) with check(true);
     insert into auth.users(id) values ('11111111-1111-4111-8111-111111111111');`);
-  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql","003_membership_periods.sql","004_membership_changes.sql","005_reporter_serials.sql","006_signup_forms.sql"])
+  for (const file of ["reporters.sql","activity_log.sql","photo_assets.sql","001_news.sql","002_membership.sql","003_membership_periods.sql","004_membership_changes.sql","005_reporter_serials.sql","006_signup_forms.sql","007_role_renewal_fees.sql","008_card_renewal_system.sql","009_editable_reporter_serials.sql","010_news_author_editing.sql"])
   {
     if(file === "005_reporter_serials.sql") sql(`insert into public.reporters(name,father_name,designation,city,cnic,contact,whatsapp,address,issue_date,expiry_date,serial_number) values('Legacy','Father','Reporter','Lahore','35202-1111111-1','03001234567','03001234567','Private','2026-01-01','2027-01-01','96N/900/2027'),('Unassigned','Father','Reporter','Lahore','35202-1111111-2','03001234567','03001234567','Private','2026-01-01','2027-01-01','');`);
     sql((file === "005_reporter_serials.sql" ? "begin;\n" : "") + "select set_config('news.owner_id','11111111-1111-4111-8111-111111111111',false);\n" + await readFile(new URL("../db/schema/" + file,import.meta.url),"utf8") + (file === "005_reporter_serials.sql" ? "\ncommit;" : ""));

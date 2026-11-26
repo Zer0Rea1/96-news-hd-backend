@@ -37,6 +37,7 @@ export const postSchema = z.object({
     return url.protocol === "https:" && url.hostname === "res.cloudinary.com" && !url.username && !url.password && !url.search && !url.hash;
   }, "Use an uploaded news thumbnail."),
   tags: z.array(z.uuid()).min(1).max(10).refine(value => new Set(value).size === value.length, "Duplicate labels are not allowed."),
+  authorname: z.string().trim().max(120).optional(),
   status: z.enum(["draft", "published"]).default("draft"),
 }).strict();
 export const postUpdateSchema = postSchema.extend({ version: z.number().int().positive() }).strict();

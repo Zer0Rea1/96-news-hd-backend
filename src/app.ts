@@ -31,7 +31,7 @@ export function createApp(services?: Services) {
     if (!origin || origins.includes(origin)) callback(null, true);
     else callback(Object.assign(new Error("Origin not allowed"), { status: 403 }));
   }, credentials: false, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "If-Match"], maxAge: 600 }));
-  if (process.env.VERCEL) app.set("trust proxy", 1);
+  if (process.env.VERCEL || process.env.NETLIFY) app.set("trust proxy", 1);
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -52,6 +52,7 @@ export function createApp(services?: Services) {
       limit: 150,
       standardHeaders: "draft-8",
       legacyHeaders: false,
+      skip: req => req.method === "GET" && (req.path === "/health" || req.path.startsWith("/posts") || req.path.startsWith("/tags")),
     }),
   );
   app.use("/api", (_req, res, next) => {
@@ -363,7 +364,7 @@ export function createApp(services?: Services) {
     if (error.code === "23505") {
       res
         .status(409)
-        .json({ error: "A record with this CNIC, label or slug already exists." });
+        .json({ error: "A record with this CNIC, serial ID, label or slug already exists." });
       return;
     }
     console.error(

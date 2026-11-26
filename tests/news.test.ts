@@ -79,9 +79,16 @@ describe('unified news API', () => {
     expect(response.status).toBe(201);
     const call=calls.find(call=>call.name==='mutate_news_post')!;
     expect(call.args.p_actor_id).toBe(owner); expect(call.args.p_input.article).not.toContain('onclick');
+    expect(call.args.p_input.author_name).toBe('96 News Desk');
     expect(call.args.p_input.slug).toStartWith('پاکستان-میں-تعلیم-کی-خبر-');
     expect((await request('/api/admin/news/posts','owner',{...input,authorid:'spoofed'})).status).toBe(400);
     expect((await request('/api/admin/news/posts','owner',{...input,thumbnailImage:image.replace('/news/','/other/')})).status).toBe(400);
+  });
+  test('owner can assign a named reporter and authorid spoofing still fails',async () => {
+    const named=await request('/api/admin/news/posts','owner',{...input,authorname:'Rana Manzoor'});
+    expect(named.status).toBe(201);
+    expect(calls.at(-1)?.args.p_input.author_name).toBe('Rana Manzoor');
+    expect((await request('/api/admin/news/posts','owner',{...input,authorid:owner})).status).toBe(400);
   });
   test('title edits preserve the slug and stale writes return a conflict',async () => {
     expect((await request('/api/admin/news/posts/article-1','owner',{...input,version:1,title:'نیا عنوان'},'PUT')).status).toBe(200);

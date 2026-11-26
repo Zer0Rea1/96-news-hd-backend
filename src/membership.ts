@@ -15,7 +15,7 @@ export const applicationSchema = z.object({
   province: z.enum(["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Azad Kashmir", "Gilgit Baltistan", "Islamabad"]), district: z.string().trim().max(100), tehsil: z.string().trim().max(100), city: z.string().trim().max(100),
 
 }).strict();
-export const roleSchema = z.object({ name: text(100), level: z.enum(["province", "district", "tehsil", "city"]), fee: z.number().int().min(1).max(1000000), fixed_province: z.enum(["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Azad Kashmir", "Gilgit Baltistan", "Islamabad"]).nullable(), active: z.boolean() }).strict();
+export const roleSchema = z.object({ name: text(100), level: z.enum(["province", "district", "tehsil", "city"]), fee: z.number().int().min(1).max(1000000), renewal_fee: z.number().int().min(1).max(1000000).default(1000), fixed_province: z.enum(["Punjab", "Sindh", "Khyber Pakhtunkhwa", "Balochistan", "Azad Kashmir", "Gilgit Baltistan", "Islamabad"]).nullable(), active: z.boolean() }).strict();
 export const designationChangeSchema = z.object({ role_id: z.uuid(), role_version: z.number().int().positive(), version: z.number().int().positive() }).strict();
 export function designationDetails(details: z.infer<typeof applicationSchema>, role: { name: string; level: string; fixed_province: string | null }) {
   const { role_id: _id, role_version: _version, ...input } = details;
@@ -24,7 +24,7 @@ export function designationDetails(details: z.infer<typeof applicationSchema>, r
   const area = text(100).parse(input[role.level === "province" ? "province" : role.level === "district" ? "district" : role.level === "tehsil" ? "tehsil" : "city"]);
   return { ...input, role: role.name, designation_area: area === "Punjab" ? "پنجاب" : area };
 }
-export const paymentSettingsSchema = z.object({ enabled: z.boolean(), version: z.number().int().positive(), accounts: z.array(z.object({ name: text(100), number: text(100), title: text(200) }).strict()).max(10), instructions: z.string().trim().max(2000) }).strict().refine(v => !v.enabled || v.accounts.length > 0, "Add a receiving account before enabling payments");
+export const paymentSettingsSchema = z.object({ enabled: z.boolean(), version: z.number().int().positive(), card_renewal_fee: z.number().int().min(1).max(1000000).default(400), accounts: z.array(z.object({ name: text(100), number: text(100), title: text(200) }).strict()).max(10), instructions: z.string().trim().max(2000) }).strict().refine(v => !v.enabled || v.accounts.length > 0, "Add a receiving account before enabling payments");
 const version = z.number().int().positive();
 const decisionSchema = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("approve"), version }).strict(),
@@ -56,9 +56,9 @@ export function mountMembership(app: Express, services?: Services) {
     } catch (error) { next(error); }
   };
   async function paymentSettings() {
-    const { data, error } = await db!.from("membership_payment_settings").select("enabled,accounts,instructions,version").eq("singleton", true).single();
+    const { data, error } = await db!.from("membership_payment_settings").select("enabled,accounts,instructions,version,card_renewal_fee").eq("singleton", true).single();
     if (error) throw error;
-    return data;
+    return { ...data, card_renewal_fee: data.card_renewal_fee ?? 400 };
   }
   app.get("/api/admin/membership/payment-settings", async (_req, res, next) => {
     try { res.json(await paymentSettings()); } catch (e) { next(e); }
@@ -67,7 +67,7 @@ export function mountMembership(app: Express, services?: Services) {
     try { const input = paymentSettingsSchema.parse(req.body); const { data, error } = await db!.rpc("save_membership_payment_settings", { p_actor: res.locals.actor.id, p_input: input }); if (error) throw error; res.json(data); } catch (e) { next(e); }
   });
   app.get("/api/membership/options", async (_req, res, next) => {
-    try { const { data, error } = await db!.from("membership_roles").select("*").eq("active", true).order("fee").order("name"); if (error) throw error; const settings = await paymentSettings(); res.json({ paymentsEnabled: settings.enabled, accounts: settings.accounts, instructions: settings.instructions, version: settings.version, currency: "PKR", roles: data }); } catch (e) { next(e); }
+    try { const { data, error } = await db!.from("membership_roles").select("*").eq("active", true).order("fee").order("name"); if (error) throw error; const settings = await paymentSettings(); res.json({ paymentsEnabled: settings.enabled, accounts: settings.accounts, instructions: settings.instructions, version: settings.version, currency: "PKR", cardRenewalFee: settings.card_renewal_fee, roles: data }); } catch (e) { next(e); }
   });
   app.get("/api/admin/membership/roles", async (_req, res, next) => {
     try { const { data, error } = await db!.from("membership_roles").select("*").order("fee").order("name"); if (error) throw error; res.json({ roles: data }); } catch (e) { next(e); }
@@ -118,7 +118,7 @@ export function mountMembership(app: Express, services?: Services) {
   app.get("/api/member/application", async (_req, res, next) => {
     try {
       const application = await own(res.locals.member.id);
-      if (application) { delete application.proof_path; delete application.photo_path; }
+      if (application) { delete application.proof_path; delete application.photo_path; delete application.card_proof_path; }
       res.json(application);
     } catch (e) { next(e); }
   });
@@ -201,6 +201,42 @@ export function mountMembership(app: Express, services?: Services) {
       next(e);
     }
   });
+  app.post("/api/member/card-renewal", upload.single("proof"), async (req, res, next) => {
+    let path: string | undefined;
+    try {
+      const settings = await paymentSettings();
+      if (!settings.enabled) { res.status(503).json({ error: "Payment collection is not open yet." }); return; }
+      const application = await own(res.locals.member.id);
+      if (!application || application.status !== "approved" || !application.reporter_id || application.card_renewal_status === "pending") {
+        res.status(409).json({ error: "This application cannot accept card renewal payment." }); return;
+      }
+      const { data: reporter, error: repError } = await db!.from("reporters").select("expiry_date").eq("id", application.reporter_id).maybeSingle();
+      if (repError) throw repError;
+      if (!reporter) { res.status(404).json({ error: "Profile not found." }); return; }
+      const today = new Date().toISOString().slice(0, 10);
+      const days = (Date.parse(reporter.expiry_date) - Date.parse(today)) / 86_400_000;
+      if (days > 30) {
+        res.status(400).json({ error: "Card renewal is only available when 1 month or less remains before expiry." }); return;
+      }
+      const inputVersion = z.coerce.number().int().positive().parse(req.body.version);
+      if (inputVersion !== application.version) { res.status(409).json({ error: "Reload the application before uploading." }); return; }
+      if (!req.file || !["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) {
+        res.status(400).json({ error: "Upload a JPG, PNG or WebP receipt, up to 4 MB." }); return;
+      }
+      const buffer = await privateImage(req.file.buffer, 1800, 2400);
+      path = `${application.id}/card-${randomUUID()}.webp`;
+      const { error: uploadError } = await db!.storage.from(bucket).upload(path, buffer, { contentType: "image/webp", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data, error } = await db!.rpc("submit_card_renewal_payment", { p_user_id: res.locals.member.id, p_version: inputVersion, p_path: path });
+      if (error) throw error;
+      path = undefined;
+      delete data.proof_path; delete data.photo_path; delete data.card_proof_path;
+      res.json(data);
+    } catch (e) {
+      if (path) await db!.storage.from(bucket).remove([path]).catch(() => undefined);
+      next(e);
+    }
+  });
   app.get("/api/member/profile", async (_req, res, next) => {
     try {
       const application = await own(res.locals.member.id);
@@ -208,7 +244,10 @@ export function mountMembership(app: Express, services?: Services) {
       const { data: reporter, error } = await db!.from("reporters").select("*").eq("id", application.reporter_id).maybeSingle();
       if (error) throw error;
       if (!reporter || reporter.status === "draft") { res.status(403).json({ error: "Your profile is unavailable. Contact the newsroom." }); return; }
-      res.json({ reporter, membership: { status: reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) > Date.now() ? "active" : "expired", issue_date: reporter.membership_started_at, expiry_date: reporter.membership_expires_at, fee: application.fee, currency: "PKR" }, profile_url: `https://profile.96newshd.com/p/${reporter.id}` });
+      const { data: role } = application.role_id ? await db!.from("membership_roles").select("renewal_fee").eq("id", application.role_id).maybeSingle() : { data: null };
+      const renewalFee = role?.renewal_fee ?? 1000;
+      const settings = await paymentSettings();
+      res.json({ reporter, membership: { status: reporter.membership_expires_at && Date.parse(reporter.membership_expires_at) > Date.now() ? "active" : "expired", issue_date: reporter.membership_started_at, expiry_date: reporter.membership_expires_at, fee: application.fee, renewal_fee: renewalFee, card_renewal_fee: settings.card_renewal_fee ?? 400, currency: "PKR" }, profile_url: `https://profile.96newshd.com/p/${reporter.id}` });
     } catch (e) { next(e); }
   });
   // /api/admin is already protected by the shared owner guard.
@@ -255,22 +294,36 @@ export function mountMembership(app: Express, services?: Services) {
   app.get("/api/admin/applications", async (req, res, next) => {
     try {
       const page = z.coerce.number().int().min(1).max(100000).parse(req.query.page ?? 1);
-      const { data, count, error } = await db!.from("membership_applications").select("id,user_id,email,details,fee,status,renewal_status,pending_designation,rejection_reason,reporter_id,version,created_at,reviewed_at", { count: "exact" }).order("created_at", { ascending: false }).order("id").range((page - 1) * 50, page * 50 - 1);
+      const { data, count, error } = await db!.from("membership_applications").select("id,user_id,email,role_id,details,fee,status,renewal_status,card_renewal_status,card_rejection_reason,pending_designation,rejection_reason,reporter_id,version,created_at,reviewed_at", { count: "exact" }).order("created_at", { ascending: false }).order("id").range((page - 1) * 50, page * 50 - 1);
       if (error) throw error;
-      res.json({ applications: data, total: count });
+      const roleIds = [...new Set((data || []).map(a => a.role_id).filter(Boolean))];
+      const { data: roles } = roleIds.length ? await db!.from("membership_roles").select("id,renewal_fee").in("id", roleIds) : { data: [] };
+      const roleMap = new Map((roles || []).map(r => [r.id, r.renewal_fee]));
+      const settings = await paymentSettings();
+      const applications = (data || []).map(a => ({ ...a, renewal_fee: roleMap.get(a.role_id) ?? 1000, card_renewal_fee: settings.card_renewal_fee ?? 400 }));
+      res.json({ applications, total: count });
     } catch (e) { next(e); }
   });
   app.get("/api/admin/applications/:id/proof", async (req, res, next) => {
     try {
       const id = z.uuid().parse(req.params.id);
-      const kind = z.enum(["proof", "photo"]).parse(req.query.kind || "proof");
-      const { data, error } = await db!.from("membership_applications").select("proof_path,photo_path").eq("id", id).maybeSingle();
+      const kind = z.enum(["proof", "photo", "card_proof"]).parse(req.query.kind || "proof");
+      const { data, error } = await db!.from("membership_applications").select("proof_path,photo_path,card_proof_path").eq("id", id).maybeSingle();
       if (error) throw error;
-      const path = kind === "photo" ? data?.photo_path : data?.proof_path;
+      const path = kind === "photo" ? data?.photo_path : kind === "card_proof" ? data?.card_proof_path : data?.proof_path;
       if (!path) { res.status(404).json({ error: "No payment receipt." }); return; }
       const { data: signed, error: signError } = await db!.storage.from(bucket).createSignedUrl(path, 60);
       if (signError) throw signError;
       res.json({ url: signed!.signedUrl });
+    } catch (e) { next(e); }
+  });
+  app.post("/api/admin/applications/:id/card-decision", async (req, res, next) => {
+    try {
+      const id = z.uuid().parse(req.params.id);
+      const input = decisionSchema.parse(req.body);
+      const { data, error } = await db!.rpc("review_card_renewal", { p_id: id, p_actor: res.locals.actor.id, p_actor_email: res.locals.actor.email, p_input: input });
+      if (error) throw error;
+      res.json(data);
     } catch (e) { next(e); }
   });
   app.post("/api/admin/applications/:id/renew", async (req, res, next) => {
